@@ -9,7 +9,7 @@ from tapioca.core.manifest_pb2 import ManifestBlockProto
 from tapioca.core.manifest_sources import DirectoryManifestSource
 
 
-HASH_ALG = hashlib.sha512
+HASH_ALG = hashlib.sha1
 
 
 def hash_block(block):
