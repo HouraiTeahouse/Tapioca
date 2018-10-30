@@ -6,7 +6,7 @@ from collections import namedtuple
 from tapioca.core.manifest_pb2 import ManifestProto
 from tapioca.core.manifest_pb2 import ManifestItemProto
 from tapioca.core.manifest_pb2 import ManifestBlockProto
-from tapioca.core.sources import DirectorySource
+from tapioca.core.manifest_sources import DirectoryManifestSource
 
 
 HASH_ALG = hashlib.sha512
@@ -229,7 +229,8 @@ class Manifest():
         """Verify if the installation of a build matches a reference
         manifest.
         """
-        current_manifest = ManifestFactory().build(DirectorySource(root_dir))
+        current_manifest = ManifestFactory().build(
+            DirectoryManifestSource(root_dir))
         return not ManifestDiff(self, current_manifest).has_changed()
 
 
