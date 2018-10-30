@@ -10,7 +10,7 @@ message BuildId {
   uint64 fprint = 2;
 }
 
-message Manifest {
+message ManifestProto {
   PackageId package_id = 1;
   BuildId build_id = 2;
   repeated Block block = 3;
@@ -22,7 +22,7 @@ message Manifest {
 }
 
 // A manifest descriptor for a block within a build
-message Block {
+message ManifestBlockProto {
   // The hash of the block
   bytes hash = 1;
   // Optional: The size of the block. Only present when the size of the block is
@@ -31,7 +31,7 @@ message Block {
 }
 
 // A manifest descriptor for a item (a file or directory) within a build
-message Item {
+message ManifestItemProto {
   string name = 1;
 
   oneof descriptor {
