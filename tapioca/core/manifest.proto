@@ -1,4 +1,4 @@
-import 'google.protobuf.timestamp.proto';
+syntax = "proto3";
 
 message PackageId {}
 
@@ -13,36 +13,41 @@ message BuildId {
 message Manifest {
   PackageId package_id = 1;
   BuildId build_id = 2;
-  uint64 max_block_size = 3;
-  // A list of blocks
-  repeated Block block = 4;
-  // A descriptor of all of the
-  repeated Item item = 5;
-  // Optional:
-  string fallback_storage_prefix = 6;
+  repeated Block block = 3;
+  repeated Item item = 4;
+  // Required: the maximum size of blocks within the build in bytes.
+  uint64 max_block_size = 5;
+  // Required: the URL prefix to download objects from.
+  string block_storage_prefix = 6;
 }
 
 // A manifest descriptor for a block within a build
 message Block {
   // The hash of the block
   bytes hash = 1;
-  // The size of the block. Only present when the size of the block is not the
-  // max_block_size
+  // Optional: The size of the block. Only present when the size of the block is
+  // not the max_block_size of the manifest.
   uint64 size = 2;
 }
 
 // A manifest descriptor for a item (a file or directory) within a build
 message Item {
-  // Required: The name of the file or directory
   string name = 1;
-  // Files only: the hash of the file
-  bytes hash = 2;
-  // Files only: The size of the file
-  uint64 size = 3;
+
   oneof descriptor {
-    // Files only: the sequence of blocks that consitute this
-    repeated uint64 block_id = 4;
-    // Directory only: a list of child elements within the directory
-    repeated Item children = 5;
+    File file = 2;
+    Directory directory = 3;
+  }
+
+  message File {
+    bytes hash = 1;
+    uint64 size = 2;
+    // The sequence of blocks that consitute the file. The ID corresponds to the
+    // index of the block in the manifest.
+    repeated uint64 block_ids = 3;
+  }
+
+  message Directory {
+    repeated Item children = 1;
   }
 }
