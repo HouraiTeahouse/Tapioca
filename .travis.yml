@@ -2,14 +2,22 @@ language: python
 cache:
   pip: true
   directories:
-  - $HOME/protobuf
+  - $HOME/protoc
 python: 3.7-dev
+env:
+  global:
+    - PROTO_VERSION="3.6.1"
 before_install:
-- bash scripts/install_protobuf.sh
+- bash install_protobuf.sh $PROTO_VERSION
 install:
 - pip install -r requirements.txt
 - pip install flake8
-- protoc **/*.proto --python_out=.
+- |
+  $HOME/protoc/bin/protoc \
+  --proto_path=$HOME/protoc/include \
+  --proto_path=$(pwd) \
+  --python_out=$(pwd) \
+  **/*.proto
 script:
 - flake8 --show-source tapioca
 - python -m unittest discover
