@@ -13,8 +13,8 @@ message BuildId {
 message ManifestProto {
   PackageId package_id = 1;
   BuildId build_id = 2;
-  repeated Block block = 3;
-  repeated Item item = 4;
+  repeated ManifestBlockProto blocks = 3;
+  repeated ManifestItemProto items = 4;
   // Required: the maximum size of blocks within the build in bytes.
   uint64 max_block_size = 5;
   // Required: the URL prefix to download objects from.
@@ -48,6 +48,6 @@ message ManifestItemProto {
   }
 
   message Directory {
-    repeated Item children = 1;
+    repeated ManifestItemProto children = 1;
   }
 }
