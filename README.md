@@ -1,5 +1,4 @@
-# Tapioca [![Travis
-CI](https://api.travis-ci.org/HouraiTeahouse/Tapioca.svg?branch=master)](https://travis-ci.org/HouraiTeahouse/Tapioca)
+# Tapioca [![Travis CI](https://api.travis-ci.org/HouraiTeahouse/Tapioca.svg?branch=master)](https://travis-ci.org/HouraiTeahouse/Tapioca)
 
 Tapioca is Hourai Teahouse's game deployment system.  Inspired by Valve's
 SteamPipe upload system, Tapioca is built to to efficently and continuously
