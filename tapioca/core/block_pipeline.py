@@ -15,15 +15,43 @@ class BlockPipeline():
         self.sinks = []
 
     def add_source(self, source):
+        """Adds a BlockSource to the pipeline. BlockSources are evaluated
+        sequentially for each block and in order in which they are added to the
+        pipeline.  The first source to provide a valid (non-None, non-error)
+        result will be used for the rest. This is meant to provide fallback
+        block source support in case a source is inaccessible.
+
+        The provided BlockSource's get_block method can be implemented with
+        either synchronous or asynchronous. Synchronous sources will be run in
+        a background executor to avoid starving the main thread.
+        """
         _append_async_tuple(self.sources, source, lambda s: s.get_block)
         return self
 
     def then(self, processor):
+        """Adds a BlockProcessor to the pipeline. BlockProcessors are evaluated
+        sequentially for each block, in the order they are added to the
+        pipeline. If the BlockProcessor errors out or fails to return a
+        bytes-like object, the pipeline will not continue for that block, but
+        will not shutdown the entire pipeline.
+
+        The provided BlockProcessors's process_block method can be implemented
+        with either synchronous or asynchronous. Synchronous processors will be
+        run in a background executor to avoid starving the main thread.
+        """
         _append_async_tuple(self.processors, processor,
                             lambda p: p.process_block)
         return self
 
     def write_to(self, sink):
+        """Adds a BlockSink to the pipeline. BlockSinks are run in parallel
+        after all BlockProcessors have finished executing. Errors from
+        BlockSinks will not stop the pipeline, and will not be retried.
+
+        The provided BlockSink's write_block method can be implemented
+        with either synchronous or asynchronous. Synchronous sinks will be run
+        in a background executor to avoid starving the main thread.
+        """
         _append_async_tuple(self.sinks, sink, lambda s: s.write_block)
         return self
 
@@ -37,7 +65,15 @@ class BlockPipeline():
             # TODO(james7132): handle error
             pass
 
-    async def _run_block(self, block_hash, executor):
+    async def run_block(self, block_hash, executor=None):
+        """Runs a block through the pipeline.
+
+        Params:
+          block_hash (bytes):
+            the hash of the block to run though the pipeline.
+          executor (concurrent.futures.Executor):
+            Optional: a background executor to run synchronous operations in.
+        """
         block = None
 
         # Fetch the block
@@ -63,5 +99,13 @@ class BlockPipeline():
         await asyncio.gather(*write_tasks)
 
     def run(self, block_hashes, executor=None):
+        """Runs multiple block through the pipeline in parallel.
+
+        Params:
+          block_hashes (list[bytes]):
+            the hashes of the blocks to run though the pipeline.
+          executor (concurrent.futures.Executor):
+            Optional: a background executor to run synchronous operations in.
+        """
         return asyncio.gather(*[self._run_block(block_hash, executor)
                                 for block_hash in block_hashes])
