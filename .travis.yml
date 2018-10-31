@@ -12,12 +12,8 @@ before_install:
 install:
 - pip install -r requirements.txt
 - pip install flake8
-- |
-  echo "$(pwd)\n$(ls **/*.proto)\n" && $HOME/protoc/bin/protoc \
-  --proto_path=$HOME/protoc/include \
-  --proto_path=$(pwd) \
-  --python_out=$(pwd) \
-  **/*.proto
+- echo $(pwd)
+- $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --python_out=$(pwd) **/*.proto
 script:
 - flake8 --show-source tapioca
 - python -m unittest discover
