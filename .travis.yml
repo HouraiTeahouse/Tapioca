@@ -1,9 +1,15 @@
 language: python
-cache: pip
+cache:
+  pip: true
+  directories:
+  - $HOME/protobuf
 python: 3.7-dev
+before_install:
+- bash scripts/install_protobuf.sh
 install:
 - pip install -r requirements.txt
 - pip install flake8
+- protoc **/*.proto --python_out=.
 script:
 - flake8 --show-source tapioca
 - python -m unittest discover
