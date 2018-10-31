@@ -12,10 +12,9 @@ before_install:
 install:
 - pip install -r requirements.txt
 - pip install flake8
-- echo $(pwd)
-- $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --python_out=$(pwd) **/*.proto
 script:
 - flake8 --show-source tapioca
+- bash -c "shopt -s globstar; $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --python_out=$(pwd) **/*.proto"
 - python -m unittest discover
 notifications:
   email: false
