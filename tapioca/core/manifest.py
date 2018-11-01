@@ -1,12 +1,12 @@
+from collections import namedtuple
+from tapioca.core.manifest_pb2 import ManifestBlockProto
+from tapioca.core.manifest_pb2 import ManifestItemProto
+from tapioca.core.manifest_pb2 import ManifestProto
+from tapioca.core.manifest_sources import DirectoryManifestSource
+import hashlib
+import itertools
 import os
 import shutil
-import itertools
-import hashlib
-from collections import namedtuple
-from tapioca.core.manifest_pb2 import ManifestProto
-from tapioca.core.manifest_pb2 import ManifestItemProto
-from tapioca.core.manifest_pb2 import ManifestBlockProto
-from tapioca.core.manifest_sources import DirectoryManifestSource
 
 
 HASH_ALG = hashlib.sha1

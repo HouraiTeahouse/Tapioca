@@ -108,4 +108,4 @@ class BlockPipeline():
             Optional: a background executor to run synchronous operations in.
         """
         return asyncio.gather(*[self._run_block(block_hash, executor)
-                                for block_hash in block_hashes])
+                                for block_hash in source.get_blocks()])

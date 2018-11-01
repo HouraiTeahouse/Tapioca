@@ -1,5 +1,5 @@
-import logging
 from tapioca.core.manifest import ManifestBuilder
+import logging
 
 log = logging.getLogger(__name__)
 

@@ -1,7 +1,8 @@
-import zlib
-import logging
 from abc import abstractmethod
 from tapioca.core.manifest import hash_block
+import logging
+import os
+import zlib
 
 
 log = logging.getLogger(__name__)
@@ -54,19 +55,21 @@ class CachedBlockFetcher(BlockFetcher):
 
     If the provided block is not None
     """
+
     def __init__(self, base_fetcher, cache_dir):
-        self.base_source = base_source
+        self.base_fetcher = base_fetcher
         self.cache_dir = cache_dir
 
-    async def process_block(self, block_hash):
+    async def process_block(self, block_hash, block):
         if block is not None:
             return block
-        path = os.path.join(self.cache_dir, block_hash.hex())
+        block_hex = block_hash.hex()
+        path = os.path.join(self.cache_dir, block_hex)
         if os.path.exists(path):
             log.info(f'Found block in cache: "{block_hex}"')
             with open(path, 'rb') as f:
                 return f.read()
-        fetched_block = await self.base_source.get_block(block_hash)
+        fetched_block = await self.base_fetcher.get_block(block_hash)
         if fetched_block is not None:
             # Save block to the cache
             with open(path, 'wb') as f:
@@ -81,7 +84,8 @@ class GzipBlockProcessor(BlockProcessor):
         self.level = level
 
     def process_block(self, block_hash, block):
-        log.info(f'Compressing block (gzip -{self.level}): "{block_hash.hex()}..."')
+        log.info(f'Compressing block (gzip -{self.level}):'
+                 f'"{block_hash.hex()}..."')
         return zlib.compress(block, self.level)
 
 
@@ -101,6 +105,7 @@ class ValidateBlockProcessor(BlockProcessor):
     def process_block(self, block_hash, block):
         b_hash = hash_block(block)
         if b_hash != block_hash:
-            log.error(f'Block hash mismatch: "{block_hash.hex()}" vs "{b_hash.hex()}"')
+            log.error(f'Block hash mismatch: "{block_hash.hex()}"'
+                      f'vs "{b_hash.hex()}"')
             return None
         return block
