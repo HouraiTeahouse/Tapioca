@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+import "tapioca/core/manifest.proto";
+import "google/protobuf/timestamp.proto";
+
+message ProjectConfig {
+  uint32 id = 1;
+  uint32 default_branch = 2;
+  map<uint32, BranchConfig> branches = 3;
+  // Required: Platform specific launch options. Map keys are Platform values.
+  // These values are overriden by branch specific options if they are present.
+  map<uint32, LaunchOptions> launch_options = 4;
+  // Required: the URL prefix to download objects from.
+  string block_storage_prefix = 5;
+}
+
+enum Platform {
+  WINDOWS = 0;
+  MAC_OS = 1;
+  LINUX = 2;
+}
+
+message LaunchOptions {
+  string executable = 1;
+  repeated string launch_flags = 2;
+}
+
+// ID: 8 bytes:
+//     {4-byte Project ID} +
+//     {4-byte branch name fingerprint}
+message BranchConfig {
+  uint32 project_id = 1;
+  uint32 id = 2;
+  // Source control branch name.
+  string name = 3;
+  // Optional: Human facing display name for the branch
+  string display_name = 4;
+  // Optional: Platform specific launch options. Map keys are Platform values.
+  // Overrides project wide launch options when provided.
+  map<uint32, LaunchOptions> launch_options = 5;
+}
+
+message Build {
+  message Metadata {
+    // Required: The source control commit hash.
+    bytes source_commit = 1;
+
+    // Reqired: The timestamp the build was created at.
+    google.protobuf.Timestamp build_timestamp = 2;
+
+    // Required: The target platform for the build
+    Platform platform = 3;
+  }
+
+  // ID: 22 bytes:
+  //     {8-byte Branch ID} +
+  //     {8-byte Unix Timestamp} +
+  //     {4-byte truncated SHA-1 of commit}
+  //     {2-byte Platform}
+  bytes id = 1;
+
+  // The build manifest
+  tapioca.core.ManifestProto manifest = 2;
+
+  Metadata metadata = 3;
+
+  // Information on how to launch the build.
+  LaunchOptions launch_options = 4;
+}
+
+// ID: 42 bytes:
+//     {20-byte block SHA-1} +
+//     {22-byte block build hash}
+message BlockInfo {
+  bytes build_id = 1;
+  bytes hash = 2;
+}

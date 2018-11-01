@@ -1,24 +1,12 @@
 syntax = "proto3";
 
-message PackageId {}
-
-// The ID for a particular build
-message BuildId {
-  // The timestamp of the build's creation
-  uint64 timestamp = 1;
-  // The fprint of the
-  uint64 fprint = 2;
-}
+package tapioca.core;
 
 message ManifestProto {
-  PackageId package_id = 1;
-  BuildId build_id = 2;
-  repeated ManifestBlockProto blocks = 3;
-  repeated ManifestItemProto items = 4;
+  repeated ManifestBlockProto blocks = 1;
+  repeated ManifestItemProto items = 2;
   // Required: the maximum size of blocks within the build in bytes.
-  uint64 max_block_size = 5;
-  // Required: the URL prefix to download objects from.
-  string block_storage_prefix = 6;
+  uint64 max_block_size = 3;
 }
 
 // A manifest descriptor for a block within a build
