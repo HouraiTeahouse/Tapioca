@@ -40,7 +40,7 @@ class DirectorySource(TapiocaSource):
                 yield block
 
 
-class ZipSource(TapiocaSource):
+class ZipFileSource(TapiocaSource):
 
     def __init__(self, zip_file):
         self.zip_file = zip_file
@@ -55,10 +55,3 @@ class ZipSource(TapiocaSource):
         with self.zip_file.open(path) as f:
             for block in iter(lambda: f.read(block_size), b''):
                 yield block
-
-    def __enter__(self):
-        self.zip_file.__enter__()
-        return self
-
-    def __exit__(self, exc_type, value, traceback):
-        self.zip_file.__exit__(exc_type, value, traceback)
