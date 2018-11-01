@@ -1,4 +1,6 @@
+from coders import IdentityCoder, ProtobufCoder
 from functools import lru_cache
+from tapioca.server.data_pb2mp import ProjectConfig, Build, BlockInfo
 import asyncio
 import hashlib
 import lmdb
@@ -9,21 +11,40 @@ import zlib
 
 log = logging.getLogger(__name__)
 
-configs = None
-manifests = None
-blocks = None
+
+class ProtoDatabase():
+    __slots__ = ['key_coder', 'value_coder', 'db']
+
+    def __init__(self, key_coder=None, value_coder=None):
+        self.key_coder = key_coder or IdentityCoder()
+        self.value_coder = value_coder or IdentityCoder()
+        self.db = None
+
+    def get(self, txn, key, *args, **kwargs):
+        value = txn.get(self.key_coder.encode(key), db=db, *args, **kwargs)
+        return self.value_coder.decode(value)
+
+    def put(self, txn, key, value, *args, **kwargs):
+        return txn.put(self.key_coder.encode(key),
+                       self.value_coder.encode(value),
+                       db=db, *args, **kwargs)
+
+
+configs = ProtoDatabase(value_coder=ProtobufCoder(ProjectConfig)),
+builds = ProtoDatabase(value_coder=ProtobufCoder(Build).compressed(9)),
+blocks = ProtoDatabase(value_coder=ProtobufCoder(BlockInfo)),
 
 
 def init():
     global lmdb_env
     lmdb_env = lmdb.open(config.DB_LOCATION)
 
-    dbs = ['configs', 'manifests', 'blocks']
+    dbs = ['configs', 'builds', 'blocks']
 
     module = sys.modules[__name__]
     with lmdb_env.begin(write=True) as txn:
         for db in dbs:
-            setattr(module, db, lmdb_env.open_db(db, txn=txn))
+            getattr(module, name).db = lmdb_env.open_db(db, txn=txn)
 
 
 def get_build_key(request):
@@ -41,22 +62,18 @@ def get_build_block_key(block_hash, build_key):
 
 
 @lru_cache()
-def get_manifest(request):
+def get_build(request):
     build_key = get_build_key(request)
     with lmdb_env.begin(db=manifests) as txn:
-        gzipped_manifest = txn.get(build_key)
-        return None if gzipped_manifest is None else \
-            zlib.decompress(gzipped_manifest)
+        return builds.get(txn, build_key)
 
 
-async def save_manifest(manifest, request):
-    def save_manifest_impl():
-        proto_bytes = manifest.to_proto().SerializeToString()
-        compressed_proto = zlib.compress(proto_bytes, level=9)
+async def save_build(build, request):
+    def save_build_impl():
         build_key = get_build_key(request)
         with lmdb_env.begin(write=True) as txn:
-            txn.put(build_key, compressed_proto, db=manifests)
-            for block in manifest.blocks:
+            builds.put(txn, build_key, build)
+            for block in build.manifest.blocks:
                 block_key = get_build_block_key(block.hash, build_key)
                 txn.put(block_key, b'', db=blocks)
     loop = asyncio.get_event_loop()
