@@ -98,7 +98,7 @@ class BlockPipeline():
             write_tasks.append(self._execute(is_async, task, executor))
         await asyncio.gather(*write_tasks)
 
-    def run(self, block_hashes, executor=None):
+    def run(self, source, executor=None):
         """Runs multiple block through the pipeline in parallel.
 
         Params:

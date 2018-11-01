@@ -18,6 +18,62 @@ class BlockProcessor():
         pass
 
 
+class BlockFetcher(BlockProcessor):
+
+    def with_cache(self, cache_dir):
+        return CachedBlockFetcher(self, cache_dir)
+
+
+class HttpBlockFetcher(BlockFetcher):
+    """A BlockFetcher that fetches blocks from a remote HTTP(s) server."""
+
+    def __init__(self, prefix, session):
+        self.prefix = prefix
+        self.session = session
+
+    async def process_block(self, block_hash, block):
+        if block is not None:
+            return block
+        block_hex = block_hash.hex()
+        url = os.path.join(self.prefix, block_hex)
+        # TODO(james7132): Error handling
+        # TODO(james7132): Exponential fallback
+        log.info(f'Fetching block "{block_hex}" from {url}...')
+        async with self.session.get(url) as response:
+            block = await response.read()
+            log.info(f'Fetched block "{block_hex}" from {url}.')
+            return block
+
+
+# TODO(james7132): Implement P2P block fetcher (IPFS?)
+
+
+class CachedBlockFetcher(BlockFetcher):
+    """A BlockFetcher that checks a local cache before making a request to a i
+    backing store.
+
+    If the provided block is not None
+    """
+    def __init__(self, base_fetcher, cache_dir):
+        self.base_source = base_source
+        self.cache_dir = cache_dir
+
+    async def process_block(self, block_hash):
+        if block is not None:
+            return block
+        path = os.path.join(self.cache_dir, block_hash.hex())
+        if os.path.exists(path):
+            log.info(f'Found block in cache: "{block_hex}"')
+            with open(path, 'rb') as f:
+                return f.read()
+        fetched_block = await self.base_source.get_block(block_hash)
+        if fetched_block is not None:
+            # Save block to the cache
+            with open(path, 'wb') as f:
+                f.write(fetched_block)
+        return fetched_block
+
+
 class GzipBlockProcessor(BlockProcessor):
     """A BlockProcessor that gzip compresses blocks."""
 

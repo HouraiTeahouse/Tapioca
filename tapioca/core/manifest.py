@@ -168,11 +168,8 @@ class FileInfo(namedtuple('FileInfo', 'path blocks hash size')):
 
 class Manifest():
 
-    def __init__(self):
-        self.files = []
-
-    def add_file(self, file_info):
-        self.files.append(file_info)
+    def __init__(self, files):
+        self.files = files
 
     @staticmethod
     def from_proto(proto):
@@ -195,6 +192,16 @@ class Manifest():
         block_registry.populate_manifest(manifest_proto)
         item_trie.populate_manifest(manifest_proto)
         return manifest_proto
+
+    @property
+    def blocks(self):
+        seen_blocks = set()
+        for file_info in self.files:
+            for block in file_info.blocks:
+                if block.hash in seen_blocks:
+                    continue
+                yield block
+                seen_blocks.add(block.hash)
 
     @property
     def total_space(self):
@@ -229,28 +236,10 @@ class Manifest():
         """Verify if the installation of a build matches a reference
         manifest.
         """
-        current_manifest = ManifestFactory().build(
-            DirectoryManifestSource(root_dir))
+        current_manifest = ManifestBuilder() \
+            .add_source(DirectoryManifestSource(root_dir)) \
+            .build()
         return not ManifestDiff(self, current_manifest).has_changed()
-
-
-class FileBuilder():
-
-    def __init__(self, path):
-        self.path = path
-        self._hash_alg = HASH_ALG()
-        self.blocks = []
-        self.size = 0
-
-    def process_block(self, block):
-        info = BlockInfo(hash=hash_block(block), size=len(block))
-        self.size += info.size
-        self._hash_alg.update(block)
-        return info
-
-    def build(self):
-        return FileInfo(path=self.path, blocks=tuple(self.blocks),
-                        hash=self._hash_alg.digest(), size=self.size)
 
 
 class FileDiff():
@@ -308,28 +297,51 @@ class ManifestDiff():
             file_diff.apply()
 
 
-class ManifestFactory():
-    """A factory class that generates manifests for builds."""
+class ManifestBuilder():
 
-    def build(self, source, template=None):
-        """Builds a manifest from a provided TapiocaSource.
+    def __init__(self):
+        self.files = {}
 
-        Params:
-          source (TapiocaSource):
-            A tapioca source to read files from.
-          template (Manifest):
-            A template manifest to copy base parameters from.
+    def add_file(self, path):
+        builder = self.files.get(path)
+        if builder is None:
+            builder = FileInfo(path)
+            self.files[path] = builder
+        return builder
 
-        Returns
-          Manifest:
-            The built manifest from the provided source.
-        """
-        manifest = Manifest()
+    def add_source_iter(self, source):
         with source as src:
             # TODO(james7132): Parallelize this process
             for file_path in src.get_files():
-                builder = FileBuilder(file_path)
-                for block in self.source.get_blocks(file_path):
-                    builder.process_block(block)
-                manifest.add_file(builder.build())
-        return manifest
+                file_builder = self.add_file(file_path)
+                for block in src.get_blocks(file_path):
+                    block_info = file_builder.process_block(block)
+                    yield (block_info.hash, block)
+
+    def add_source(self, source):
+        for _, _ in self.add_source_iter(source):
+            # just run though the iterator, discard the output
+            pass
+
+    def build(self):
+        files = (file_builder.build() for file_builder in self.files.values())
+        return Manifest(tuple(files))
+
+
+class FileInfoBuilder():
+
+    def __init__(self, path):
+        self.path = path
+        self._hash_alg = HASH_ALG()
+        self.blocks = []
+        self.size = 0
+
+    def process_block(self, block):
+        info = BlockInfo(hash=hash_block(block), size=len(block))
+        self.size += info.size
+        self._hash_alg.update(block)
+        return info
+
+    def build(self):
+        return FileInfo(path=self.path, blocks=tuple(self.blocks),
+                        hash=self._hash_alg.digest(), size=self.size)
