@@ -1,11 +1,11 @@
-import asyncio
-import zipfile
-from tapioca.core.manifest import
-from tapioca.core.manifest_sources import ZipFileSource
-from tapioca.core.block_sources import ManifestBuilderBlockSource
+from tapioca.core.block_pipeline import BlockPipeline
 from tapioca.core.block_processors import GzipBlockProcessor
 from tapioca.core.block_sinks import ObjectStorageBlockSink
-import tapioca.deploy.util as util
+from tapioca.core.block_sources import ManifestBuilderBlockSource
+from tapioca.core.manifest_sources import ZipFileSource
+import tapioca.server.db as db
+import tapioca.server.util as util
+import zipfile
 
 
 class UnityCloudBuildHandler():
@@ -22,10 +22,7 @@ class UnityCloudBuildHandler():
 
             source = ManifestBuilderBlockSource(ZipFileSource(zip_file))
             await pipeline.run(source)
-            manifest = source.build_manifest()
-
-            # Upload
-
+            await db.save_manifest(source.build_manifest(), request)
 
     def get_download_url(self, request):
         raise NotImplementedError

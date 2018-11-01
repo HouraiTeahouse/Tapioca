@@ -1,5 +1,5 @@
-import os
 from abc import abstractmethod
+import os
 
 
 class TapiocaSource():

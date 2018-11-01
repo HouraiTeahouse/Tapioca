@@ -1,11 +1,9 @@
-import asyncio
 from aiohttp import web
-from collections import namedtuple
-import tapioca.server.db as db
+from tapioca.server.util import BuildDeployment
+import asyncio
 import tapioca.deploy.config as config
+import tapioca.server.db as db
 
-DeploymentRequest = namedtuple("DeploymentRequest",
-                               "handler project branch build http_request")
 
 routes = web.RoutTableDef()
 
@@ -14,10 +12,8 @@ routes = web.RoutTableDef()
 @routes.post('/manifest/{project}/{branch}')
 @routes.post('/manifest/{project}/{branch}/{build}')
 async def manifest(request):
-    manifest_bytes = db.get_manifest(
-        request.match_info['project'],
-        request.match_info['branch'],
-        request.match_info['build'])
+    build = BuildDeployment.from_http_request(request)
+    manifest_bytes = db.get_manifest(build)
 
     if manifest_bytes is not None:
         return web.Response(status=200, body=manifest_bytes)
@@ -29,38 +25,23 @@ async def manifest(request):
 @routes.post('/deploy/{handler}/{project}/{branch}')
 @routes.post('/deploy/{handler}/{project}/{branch}/{build}')
 async def deploy(request):
-    parameters = request.match_info
-
-    handler = parameters['handler']
-    project = parameters['project']
-    branch = parameters.get('branch', 'master')
-    build = parameters.get('build')
-
     # TODO(james7132): Authenticate
 
-    deployment_handlers = config.HANDLERS.get(handler)
+    deployment_handlers = config.HANDLERS.get(request.match_info['handler'])
     if deployment_handlers is None:
-        response = web.json_response({
+        return web.json_response({
             'status': 404,
             'message': 'No such deployment handler.'
-        })
-        return response
+        }, status=404)
 
-    deploy_tasks = []
-    for deployment_handler in deployment_handlers:
-        if deployment_handler is None:
-            continue
-        deployment_request = DeploymentRequest(handler=handler,
-                                               project=project,
-                                               branch=branch,
-                                               build=build,
-                                               http_request=request)
-        deploy_tasks.append(deployment_handler.run(deployment_request))
-    await asyncio.gather(*deploy_tasks)
+    build = BuildDeployment.from_http_request(request)
 
-    return web.json_response({
-        'message': 'Successfully deployed build.'
-    })
+    await asyncio.gather(*[
+        handler.run(build) for handler in deployment_handlers
+        if handler is not None
+    ])
+
+    return web.json_response({'message': 'Successfully deployed build.'})
 
 
 def run_server(*args, **kwargs):
