@@ -3,6 +3,7 @@ from tapioca.server.util import BuildDeployment
 import asyncio
 import tapioca.deploy.config as config
 import tapioca.server.db as db
+import uvloop
 
 
 routes = web.RoutTableDef()
@@ -45,6 +46,8 @@ async def deploy(request):
 
 
 def run_server(*args, **kwargs):
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
     db.init()
 
     app = web.Application()
