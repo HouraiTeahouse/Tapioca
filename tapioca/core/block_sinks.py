@@ -1,5 +1,8 @@
 from abc import abstractmethod
 import os
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class BlockSink():
@@ -10,6 +13,15 @@ class BlockSink():
     @abstractmethod
     def write_block(self, block_hash, block):
         raise NotImplementedError
+
+
+class NullBlockSink(BlockSink):
+    """A BlockSink that does not write the blocks anywhere, and logs the hashes
+    seen.
+    """
+
+    def write_block(self, block_hash, block):
+        log.info(f'Block: {block_hash.hex()}')
 
 
 class LocalStorageBlockSink(BlockSink):
