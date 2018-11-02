@@ -1,19 +1,12 @@
 from collections import namedtuple
+from tapioca.core import hash_block, HASH_ALG, BLOCK_SIZE
 from tapioca.core.manifest_pb2 import ManifestBlockProto
 from tapioca.core.manifest_pb2 import ManifestItemProto
 from tapioca.core.manifest_pb2 import ManifestProto
-from tapioca.core.manifest_sources import DirectoryManifestSource
-import hashlib
+from tapioca.core.manifest_sources import DirectorySource
 import itertools
 import os
 import shutil
-
-
-HASH_ALG = hashlib.sha1
-
-
-def hash_block(block):
-    return HASH_ALG(block).digest()
 
 
 def _generate_file_paths(root, manifest, path):
@@ -22,7 +15,7 @@ def _generate_file_paths(root, manifest, path):
         if item.WhichOneOf("descriptor") == "file":
             yield ("/".join(path), item)
         else:
-            yield from _generate_file_paths(item.directory, manifest, path)
+            yield from _generate_file_paths(item, manifest, path)
         path.pop()
 
 
@@ -45,7 +38,7 @@ class BlockRegistry():
 
     def _register(self, block):
         if block.hash in self._block_map:
-            print('Collision found: {block_hash.hex()}')
+            print(f'Collision found: {block.hash.hex()}')
             idx = self._block_map[block.hash]
             assert block.size == self.blocks[idx].size
             return idx
@@ -86,24 +79,24 @@ class BlockRegistry():
           manifest (Manifest):
             A manifest proto to populate.
         """
-        manifest_proto.blocks.clear()
+        del manifest_proto.blocks[:]
         manifest_proto.blocks.extend(block.to_proto() for block in self.blocks)
 
 
 class ItemTrie():
     """A trie of items within a manifest."""
 
-    def __init__(self, name, parent=None):
+    def __init__(self, name='', parent=None):
         if parent is None:
             self.item = ManifestItemProto()
         else:
-            self.item = parent.directory.children.add()
+            self.item = parent.item.children.add()
         self.item.name = name
         self.children = {}
 
-    def add(self, item):
+    def add(self, path):
         """Adds a path to the trie. Returns the created Item."""
-        norm = os.path.normpath(item.path)
+        norm = os.path.normpath(path)
         path = norm.split(os.sep)
         path.reverse()
 
@@ -125,15 +118,18 @@ class ItemTrie():
           manifest (Manifest):
             A manifest proto to populate.
         """
-        manifest.items.clear()
+        del manifest.items[:]
         manifest.items.extend(self.item.children)
 
 
 class BlockInfo(namedtuple("BlockInfo", "hash size")):
 
     @staticmethod
-    def from_proto(proto):
-        return BlockInfo(hash=proto.hash, size=proto.size)
+    def from_proto(proto, manifest=None):
+        size = proto.size
+        if manifest is not None and not proto.HasField('size'):
+            size = manifest.max_block_size
+        return BlockInfo(hash=proto.hash, size=size)
 
     def to_proto(self):
         proto = ManifestBlockProto()
@@ -158,18 +154,18 @@ class FileInfo(namedtuple('FileInfo', 'path blocks hash size')):
         item = item_trie.add(self.path)
         block_ids = (block_registry.get_id(block) for block in self.blocks)
 
-        file_proto = item.file
-        file_proto.hash = self.hash
-        file_proto.size = self.size
-        file_proto.block_ids.clear()
-        file_proto.blocks.extend(block_ids)
+        item.hash = self.hash
+        item.size = self.size
+        del item.block_ids[:]
+        item.block_ids.extend(block_ids)
         return item
 
 
 class Manifest():
 
-    def __init__(self, files):
+    def __init__(self, files, max_block_size):
         self.files = files
+        self.max_block_size = max_block_size
 
     @staticmethod
     def from_proto(proto):
@@ -191,6 +187,12 @@ class Manifest():
         manifest_proto = ManifestProto()
         block_registry.populate_manifest(manifest_proto)
         item_trie.populate_manifest(manifest_proto)
+
+        # Clean up redundant information in block sizes
+        manifest_proto.max_block_size = self.max_block_size
+        for block in manifest_proto.blocks:
+            if block.size == self.max_block_size:
+                block.ClearField('size')
         return manifest_proto
 
     @property
@@ -299,13 +301,14 @@ class ManifestDiff():
 
 class ManifestBuilder():
 
-    def __init__(self):
+    def __init__(self, max_block_size=BLOCK_SIZE):
         self.files = {}
+        self.max_block_size = max_block_size
 
     def add_file(self, path):
         builder = self.files.get(path)
         if builder is None:
-            builder = FileInfo(path)
+            builder = FileInfoBuilder(path, self.max_block_size)
             self.files[path] = builder
         return builder
 
@@ -314,7 +317,7 @@ class ManifestBuilder():
             # TODO(james7132): Parallelize this process
             for file_path in src.get_files():
                 file_builder = self.add_file(file_path)
-                for block in src.get_blocks(file_path):
+                for block in src.get_blocks(file_path, BLOCK_SIZE):
                     block_info = file_builder.process_block(block)
                     yield (block_info.hash, block)
 
@@ -325,19 +328,27 @@ class ManifestBuilder():
 
     def build(self):
         files = (file_builder.build() for file_builder in self.files.values())
-        return Manifest(tuple(files))
+        return Manifest(tuple(files), self.max_block_size)
 
 
 class FileInfoBuilder():
 
-    def __init__(self, path):
+    def __init__(self, path, max_block_size):
         self.path = path
         self._hash_alg = HASH_ALG()
         self.blocks = []
         self.size = 0
+        self.max_block_size = max_block_size
 
     def process_block(self, block):
         info = BlockInfo(hash=hash_block(block), size=len(block))
+
+        if info.size > self.max_block_size:
+            raise RuntimeError(
+                    "Attempted to add a block bigger than the manifest's"
+                    " max_block_size")
+
+        self.blocks.append(info)
         self.size += info.size
         self._hash_alg.update(block)
         return info

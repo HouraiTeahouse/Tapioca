@@ -1,16 +1,14 @@
 from abc import abstractmethod
+from zipfile import ZipFile
 import os
 
 
 class TapiocaSource():
 
-    def __init__(self):
-        pass
-
     def __enter__(self):
         return self
 
-    def exit(self, *args):
+    def __exit__(self, *args):
         pass
 
     @abstractmethod
@@ -42,8 +40,18 @@ class DirectorySource(TapiocaSource):
 
 class ZipFileSource(TapiocaSource):
 
-    def __init__(self, zip_file):
-        self.zip_file = zip_file
+    def __init__(self, path):
+        self.path = path
+        self.zip_file = None
+
+    def __enter__(self):
+        self.zip_file = ZipFile(self.path)
+        self.zip_file.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        if self.zip_file is not None:
+            self.zip_file.__exit__(*args)
 
     def get_files(self):
         for info in self.zip_file.infolist():

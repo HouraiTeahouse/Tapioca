@@ -65,23 +65,18 @@ class BlockPipeline():
             # TODO(james7132): handle error
             pass
 
-    async def run_block(self, block_hash, executor=None):
+    async def run_block(self, block_hash, block, executor=None):
         """Runs a block through the pipeline.
 
         Params:
           block_hash (bytes):
             the hash of the block to run though the pipeline.
+          block (bytes):
+            the block .
           executor (concurrent.futures.Executor):
             Optional: a background executor to run synchronous operations in.
         """
         block = None
-
-        # Fetch the block
-        for is_async, source in self.sources:
-            def task(): source.get_block(block_hash)
-            block = await self._execute(is_async, task, executor)
-            if block is not None:
-                break
 
         if block is None:
             # TODO(james7132): handle error
@@ -98,14 +93,29 @@ class BlockPipeline():
             write_tasks.append(self._execute(is_async, task, executor))
         await asyncio.gather(*write_tasks)
 
-    def run(self, source, executor=None):
-        """Runs multiple block through the pipeline in parallel.
+    async def run(self, source, executor=None):
+        """|coro|
+        Runs multiple block through the pipeline in parallel.
 
         Params:
-          block_hashes (list[bytes]):
-            the hashes of the blocks to run though the pipeline.
+          source (list[bytes]):
+            A BlockSource to read blocks from.
           executor (concurrent.futures.Executor):
             Optional: a background executor to run synchronous operations in.
         """
-        return asyncio.gather(*[self._run_block(block_hash, executor)
-                                for block_hash in source.get_blocks()])
+        async def pipeline_run_async():
+            tasks = []
+            for block_hash, block in source.get_blocks():
+                tasks.append(self.run_block(block_hash, block, executor))
+            await asyncio.gather(*tasks)
+
+        def executor_coroutine():
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(pipeline_run_async())
+            finally:
+                loop.close()
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(executor, executor_coroutine)

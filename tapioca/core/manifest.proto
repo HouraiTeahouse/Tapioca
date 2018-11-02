@@ -22,20 +22,14 @@ message ManifestBlockProto {
 message ManifestItemProto {
   string name = 1;
 
-  oneof descriptor {
-    File file = 2;
-    Directory directory = 3;
-  }
+  // File only.
+  bytes hash = 2;
+  // File only.
+  uint64 size = 3;
+  // File only. The sequence of blocks that consitute the file. The ID corresponds to
+  // the index of the block in the manifest.
+  repeated uint64 block_ids = 4;
 
-  message File {
-    bytes hash = 1;
-    uint64 size = 2;
-    // The sequence of blocks that consitute the file. The ID corresponds to the
-    // index of the block in the manifest.
-    repeated uint64 block_ids = 3;
-  }
-
-  message Directory {
-    repeated ManifestItemProto children = 1;
-  }
+  // Directory only. All child nodes within the directory.
+  repeated ManifestItemProto children = 5;
 }
