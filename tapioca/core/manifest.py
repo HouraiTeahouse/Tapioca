@@ -12,7 +12,9 @@ import shutil
 def _generate_file_paths(root, manifest, path):
     for item in root.children:
         path.push(item.name)
-        if item.WhichOneOf("descriptor") == "file":
+        # Item is a file if it has defined block ids
+        if len(item.block_ids) > 0:
+            assert len(item.children) <= 0
             yield ("/".join(path), item)
         else:
             yield from _generate_file_paths(item, manifest, path)
