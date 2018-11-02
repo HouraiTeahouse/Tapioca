@@ -9,22 +9,20 @@ import uvloop
 routes = web.RoutTableDef()
 
 
-@routes.post('/manifest/{project}')
-@routes.post('/manifest/{project}/{branch}')
-@routes.post('/manifest/{project}/{branch}/{build}')
-async def manifest(request):
-    build = BuildDeployment.from_http_request(request)
-    manifest_bytes = db.get_manifest(build)
+@routes.get('/build/{project}/{target}')
+@routes.get('/build/{project}/{target}/{branch}')
+@routes.get('/build/{project}/{target}/{branch}/{build}')
+async def get_build(request):
+    build_deployment = BuildDeployment.from_http_request(request)
+    build = db.get_manifest(build_deployment)
 
-    if manifest_bytes is not None:
-        return web.Response(status=200, body=manifest_bytes)
+    if build is not None:
+        return web.Response(body=build.SerializeAsString())
     else:
         return web.Response(status=404)
 
 
-@routes.post('/deploy/{handler}/{project}')
 @routes.post('/deploy/{handler}/{project}/{branch}')
-@routes.post('/deploy/{handler}/{project}/{branch}/{build}')
 async def deploy(request):
     # TODO(james7132): Authenticate
 
