@@ -31,7 +31,7 @@ async def download_large_file(session, url, file_descriptor,
 
 @contextlib.asynccontextmanager
 async def download_temporary_file(session, url, *args, **kwargs):
-    with tempfile.SpooledTemporaryFile(*args, **kwargs) as fd:
+    with tempfile.SpooledTemporaryFile(*args, **kwargs) as file_descriptor:
         log.info(f'Downloading {url} to temp file...')
-        await download_large_file(session, fd)
-        yield fd
+        await download_large_file(session, file_descriptor)
+        yield file_descriptor

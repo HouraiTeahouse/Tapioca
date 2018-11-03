@@ -1,8 +1,8 @@
 from tapioca.core.block_pipeline import BlockPipeline
-from tapioca.core.block_sinks import NullBlockSink
-from tapioca.core.block_sources import ManifestBuilderBlockSource
-from tapioca.core.manifest_sources import DirectorySource, ZipFileSource
-from google.protobuf import text_format
+from tapioca.core.block_sinks import ManifestBlockSink
+from tapioca.core.block_processors import BlockHasher
+from tapioca.core.block_sources import DirectorySource, ZipFileSource
+
 import asyncio
 import click
 import logging
@@ -33,7 +33,7 @@ def deploy_server(path, port):
     deploy.run_server(path=path, port=port)
 
 
-def get_manifest_source(src):
+def get_block_source(src):
     src = os.path.abspath(src)
     if os.path.isdir(src):
         return DirectorySource(src)
@@ -47,11 +47,12 @@ def get_manifest_source(src):
 @click.argument('src', nargs=1)
 @click.argument('dst', nargs=1)
 def manifest(src, dst):
-    pipeline = BlockPipeline().write_to(NullBlockSink())
-    block_source = ManifestBuilderBlockSource(get_manifest_source(src))
-    asyncio.run(pipeline.run(block_source))
-    proto = block_source.build_manifest().to_proto()
+    manifest_sink = ManifestBlockSink()
+    pipeline = BlockPipeline().then(BlockHasher()).write_to(manifest_sink)
+    asyncio.run(pipeline.run(get_block_source(src)))
+    proto = manifest_sink.build_manifest().to_proto()
     with open(dst, 'w+b') as f:
         f.write(proto.SerializeToString())
+
 
 cli()

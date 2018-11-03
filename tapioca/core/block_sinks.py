@@ -1,9 +1,11 @@
 from abc import abstractmethod
-import os
+from queue import PriorityQueue
+from threading import Lock
+from tapioca.core.manifest import ManifestBuilder
 import logging
+import os
 
 log = logging.getLogger(__name__)
-
 
 class BlockSink():
     """An abstract class for writing blocks from BlockPipelines to persistent
@@ -12,6 +14,16 @@ class BlockSink():
 
     @abstractmethod
     def write_block(self, block_hash, block):
+        """Write a block to the backing store. Can be an async or normal
+        function.
+
+        Async functions execute in the same thread that the writer is called
+        from, so keeping the amount of CPU-bound computation to a minimum is
+        paramount.
+
+        Normal functions are run in a threadpool and block the thread until
+        complete.
+        """
         raise NotImplementedError
 
 
@@ -19,9 +31,8 @@ class NullBlockSink(BlockSink):
     """A BlockSink that does not write the blocks anywhere, and logs the hashes
     seen.
     """
-
-    def write_block(self, block_hash, block):
-        log.info(f'Block: {block_hash.hex()}')
+    def write_block(self, block_data):
+        log.info(f'Block: {block_data.block.hex()}')
 
 
 class LocalStorageBlockSink(BlockSink):
@@ -37,13 +48,13 @@ class LocalStorageBlockSink(BlockSink):
     def __init__(self, directory):
         self.directory = directory
 
-    def write_block(self, block_hash, block):
-        path = os.path.join(self.directory, block_hash.hex())
+    def write_block(self, block_data):
+        path = os.path.join(self.directory, block_data.hash.hex())
         if os.path.exists(path):
             # If the block is already stored, save some disk IO.
             return
         with open(path, 'wb') as f:
-            f.write(block)
+            f.write(block_data.block)
             f.truncate()
 
 
@@ -57,11 +68,11 @@ class ObjectStorageBlockSink(BlockSink):
         self.bucket = bucket
         self.prefix = prefix
 
-    def write_block(self, block_hash, block):
-        path = block_hash.hex()
+    def write_block(self, block_data):
+        path = block_data.hash.hex()
         if self.prefix is not None:
             path = os.path.join(self.prefix, path)
-        self.bucket.upload_file(path, block)
+        self.bucket.upload_file(path, block_data.block)
 
 
 class InstallationBlockSink(BlockSink):
@@ -77,16 +88,17 @@ class InstallationBlockSink(BlockSink):
         self.root_dir = root_dir
         self.listeners = self._build_block_listeners(manifest)
 
-    def write_block(self, block_hash, block):
-        listeners = self.listeners.get(block_hash)
+    def write_block(self, block_data):
+        listeners = self.listeners.get(block_data.hash)
         if listeners is None:
             return
         # TODO(james7132): Parallelize this.
         for path, offset in listeners:
             path = os.path.join(self.root_dir, path)
+            # TODO(james7132): Use aiofiles here
             with open(path, 'wb') as f:
                 f.seek(offset)
-                f.write(block)
+                f.write(block_data.block)
 
     def _build_block_listeners(self, manifest):
         max_block_size = manifest.max_block_size
@@ -98,4 +110,56 @@ class InstallationBlockSink(BlockSink):
         return {block_hash: tuple(bucket) for block_hash, bucket in
                 block_listeners.items()}
 
-# TODO(james7132): Implement P2P block sink (IPFS?)
+
+class _FileAccumulator():
+    """A accumulator class for building manfiest files in a multithreaded
+    enviroment. FileInfoBuilder must be built sequentially over a given file,
+    for which order is not guarenteed when processing the file across a
+    threadpool. _FileAccumulator serializes the process using a PriorityQueue.
+    """
+    def __init__(self, file_builder):
+        self.builder = file_builder
+        self.next_block_id = 0
+        self.pending_blocks = PriorityQueue()
+        self.lock = Lock()
+
+    def add_block(self, block_data):
+        with self.lock.acquire():
+            self.pending_blocks.put(block_data)
+            self._advance_accumulator()
+
+    def _advance_accumulator(self):
+        # File **must** be locked to run this function
+
+        # Peek at the fist item
+        while self.pending_blocks.queue[0].block_id == self.next_block_id:
+            block = self.pending_block.get()
+            self.builder.append_block(block.to_block_info())
+            self.builder.update_hash(file_block.block)
+            self.next_block_id += 1
+
+
+class ManifestBlockSink(BlockSink):
+    """A BlockSink that builds a Manifest based on the block stream."""
+    def __init__(self):
+        self.builder = ManifestBuilder()
+        self.manifest_lock = Lock()
+        self.file_accumulators = {}
+
+    def write_block(self, block_data):
+        with self.manifest_lock.acquire():
+            file_accumulator = self.file_accumulators.get(block_data.file)
+            if file_accumulator is None:
+                file_builder = self.builder.add_file(block_data.file)
+                file_accumulator = _FileAccumulator(file_builder)
+                self.file_accumulators[block_data.file] = file_accumulator
+        file_accumulator.add_block(block_data)
+
+    def build_manifest(self):
+        """Builds the manifest based on already processed block datas streamed
+        into the sink.
+        """
+        with self.manifest_lock.acquire():
+            return self.builder.build()
+
+# TODO(): Implement P2P block sink (IPFS?)

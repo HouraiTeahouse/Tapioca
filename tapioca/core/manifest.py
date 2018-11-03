@@ -3,10 +3,13 @@ from tapioca.core import hash_block, HASH_ALG, BLOCK_SIZE
 from tapioca.core.manifest_pb2 import ManifestBlockProto
 from tapioca.core.manifest_pb2 import ManifestItemProto
 from tapioca.core.manifest_pb2 import ManifestProto
-from tapioca.core.manifest_sources import DirectorySource
 import itertools
 import os
 import shutil
+import logging
+
+
+log = logging.getLogger(__name__)
 
 
 def _generate_file_paths(root, manifest, path):
@@ -40,7 +43,7 @@ class BlockRegistry():
 
     def _register(self, block):
         if block.hash in self._block_map:
-            print(f'Collision found: {block.hash.hex()}')
+            log.info('Collision found: {block.hash.hex()}')
             idx = self._block_map[block.hash]
             assert block.size == self.blocks[idx].size
             return idx
@@ -240,10 +243,11 @@ class Manifest():
         """Verify if the installation of a build matches a reference
         manifest.
         """
-        current_manifest = ManifestBuilder() \
-            .add_source(DirectoryManifestSource(root_dir)) \
-            .build()
-        return not ManifestDiff(self, current_manifest).has_changed()
+        raise NotImplementedError
+        # current_manifest = ManifestBuilder() \
+        # .add_source(DirectoryManifestSource(root_dir)) \
+        # .build()
+        # return not ManifestDiff(self, current_manifest).has_changed()
 
 
 class FileDiff():
@@ -302,38 +306,36 @@ class ManifestDiff():
 
 
 class ManifestBuilder():
+    """A builder object for Manifests."""
 
     def __init__(self, max_block_size=BLOCK_SIZE):
         self.files = {}
         self.max_block_size = max_block_size
 
     def add_file(self, path):
+        """Adds a file to the manifest
+
+        Parameters:
+          path (str): the relative path to the root of the build the file is
+                      located at. Does not support '.', '..' relative path
+                      elements.
+
+        Returns: a FileInfoBuilder object for the file.
+        """
         builder = self.files.get(path)
         if builder is None:
             builder = FileInfoBuilder(path, self.max_block_size)
             self.files[path] = builder
         return builder
 
-    def add_source_iter(self, source):
-        with source as src:
-            # TODO(james7132): Parallelize this process
-            for file_path in src.get_files():
-                file_builder = self.add_file(file_path)
-                for block in src.get_blocks(file_path, BLOCK_SIZE):
-                    block_info = file_builder.process_block(block)
-                    yield (block_info.hash, block)
-
-    def add_source(self, source):
-        for _, _ in self.add_source_iter(source):
-            # just run though the iterator, discard the output
-            pass
-
     def build(self):
+        """Builds the Manifest object."""
         files = (file_builder.build() for file_builder in self.files.values())
         return Manifest(tuple(files), self.max_block_size)
 
 
 class FileInfoBuilder():
+    """A builder object for FileInfos."""
 
     def __init__(self, path, max_block_size):
         self.path = path
@@ -342,19 +344,48 @@ class FileInfoBuilder():
         self.size = 0
         self.max_block_size = max_block_size
 
-    def process_block(self, block):
-        info = BlockInfo(hash=hash_block(block), size=len(block))
+    def append_block(self, block_info):
+        """Adds a block info to the end of the file.
 
-        if info.size > self.max_block_size:
+        Raises a RuntimeError if the block is bigger than the max_block_size
+        for the corresponding manifest.
+
+        Parameters:
+            block_info (BlockInfo): the block metadata for the next block in
+                                    the file.
+        """
+        if block_info.size > self.max_block_size:
             raise RuntimeError(
                     "Attempted to add a block bigger than the manifest's"
                     " max_block_size")
 
-        self.blocks.append(info)
-        self.size += info.size
+        self.blocks.append(block_info)
+        self.size += block_info.size
+
+    def update_hash(self, block):
+        """Updates the file hash with the next file block.
+
+        Parameters:
+            block (bytes-like object): the next block in the object.
+        """
         self._hash_alg.update(block)
-        return info
+
+    def process_block(self, block):
+        """A shortcut for proccessing the next block in the file.
+        Constructs a BlockInfo representing the block, hashing the block,
+        appends it to the file blocks, and updates the file hash state.
+
+        Parameters:
+            block (bytes-like object): the next block in the object.
+
+        Returns: the created BlockInfo.
+        """
+        block_info = BlockInfo(hash=hash_block(block), size=len(block))
+        self.append_block(block_info)
+        self.update_hash(block)
+        return block_info
 
     def build(self):
+        """Builds a FileInfo."""
         return FileInfo(path=self.path, blocks=tuple(self.blocks),
                         hash=self._hash_alg.digest(), size=self.size)

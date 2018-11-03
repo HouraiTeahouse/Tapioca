@@ -7,7 +7,7 @@ import lmdb
 import logging
 import sys
 import tapioca.server.config as config
-import zlib
+
 
 log = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ async def purge_build(build):
             for block in build.manifest.blocks:
                 delete_build_block(txn, block, build_key)
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, save_build_impl)
+    return await loop.run_in_executor(None, purge_build_impl)
 
 
 async def is_block_dead(block):
@@ -129,5 +129,3 @@ def save_block(txn, block, build_key=None):
 def delete_build_block(txn, block, build_key):
     block_key = get_build_block_key(block.hash, build_key)
     return build_blocks.delete(txn, block_key)
-
-
