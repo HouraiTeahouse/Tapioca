@@ -1,3 +1,6 @@
+from collections import namedtuple
+from tapioca.core import hash_block
+from tapioca.core.manifest import BlockInfo
 import asyncio
 import inspect
 
@@ -7,26 +10,32 @@ def _append_async_tuple(lst, origin, func):
     lst.append((is_async, origin))
 
 
+class FileBlockData(namedtuple("FileBlockData",
+                               "file block_id hash size block")):
+
+    def with_block(self, block, update_hash=False):
+        updated = self._replace(block=block, size=len(block))
+        if update_hash:
+            updated = updated._replace(hash=hash_block(block))
+        return updated
+
+    @staticmethod
+    def from_block_info(self, block_info, *args, **kwargs):
+        return FileBlockData(hash=block_info.hash, size=block_info.size,
+                             *args, **kwargs)
+
+    def to_block_info(self):
+        assert self.hash is not None
+        assert self.size is not None
+        return BlockInfo(hash=self.hash, size=self.size)
+
+
 class BlockPipeline():
 
     def __init__(self):
         self.sources = []
         self.processors = []
         self.sinks = []
-
-    def add_source(self, source):
-        """Adds a BlockSource to the pipeline. BlockSources are evaluated
-        sequentially for each block and in order in which they are added to the
-        pipeline.  The first source to provide a valid (non-None, non-error)
-        result will be used for the rest. This is meant to provide fallback
-        block source support in case a source is inaccessible.
-
-        The provided BlockSource's get_block method can be implemented with
-        either synchronous or asynchronous. Synchronous sources will be run in
-        a background executor to avoid starving the main thread.
-        """
-        _append_async_tuple(self.sources, source, lambda s: s.get_block)
-        return self
 
     def then(self, processor):
         """Adds a BlockProcessor to the pipeline. BlockProcessors are evaluated

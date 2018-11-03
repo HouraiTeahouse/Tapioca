@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from tapioca.core.manifest import hash_block
+from tapioca.core import hash_block
 import logging
 import os
 import zlib
@@ -15,13 +15,66 @@ class BlockProcessor():
     """
 
     @abstractmethod
-    def process_block(self, block_hash, block):
-        pass
+    def process_block(self, block_data):
+        """Processes a block in the block stream. On success, the method must
+        return a FileBlockData. Returning None or raising an error will stop
+        the pipeline. Returning the provided FileBlockData is safe, but
+        modifications require constructing new FileBlockDatas.
+        """
+        raise NotImplementedError
+
+
+class DedupBlockProcessor(BlockProcessor):
+    """A BlockProcessor that removes deduplicates blocks as they appear in the
+    block stream, based on the block's hash. Blocks without hashes will also be
+    removed from the stream.
+    """
+    def __init__(self, base_source):
+        self.seen_hashes = set()
+
+    def process_block(self, block_data):
+        if block_data.hash is None or block_data.hash in seen_hashes:
+            return None
+        seen_hashes.add(block_data.hash)
+        return block_data
+
+
+class BlockHasher(BlockProcessor):
+    """A BlockProcessor that hashes provided blocks, if and only if the
+    streamed blocks do not already have a hash. Blocks with a hash pass through
+    unchanged.
+    """
+
+    def process_block(self, block_data):
+        if block_data.hash is not None:
+            return block_data
+        block_hash = hash_block(block_data.block)
+        return block_data._replace(hash=block_hash)
 
 
 class BlockFetcher(BlockProcessor):
+    """An abstract base class that fetches blocks from some storage."""
+
+    async def process_block(self, block_data):
+        if block_data.block is not None:
+            return block_data
+        if block_data.hash is not None:
+            raise RuntimeError('Tried to fetch block without hash.')
+        block = await self.fetch_block(block_data.hash)
+        return block_data.with_block(block)
+
+    @abstractmethod
+    async def fetch_block(self, block_hash):
+        """Attempt to fetch the block for a given block hash.
+
+        Should not define retry logic.
+        """
+        raise NotImplementedError
 
     def with_cache(self, cache_dir):
+        """Shortcut for creating a CachedBlockFetcher from the original
+        BlockFetcher.
+        """
         return CachedBlockFetcher(self, cache_dir)
 
 
@@ -32,9 +85,7 @@ class HttpBlockFetcher(BlockFetcher):
         self.prefix = prefix
         self.session = session
 
-    async def process_block(self, block_hash, block):
-        if block is not None:
-            return block
+    async def fetch_block(self, block_hash):
         block_hex = block_hash.hex()
         url = os.path.join(self.prefix, block_hex)
         # TODO(james7132): Error handling
@@ -60,13 +111,12 @@ class CachedBlockFetcher(BlockFetcher):
         self.base_fetcher = base_fetcher
         self.cache_dir = cache_dir
 
-    async def process_block(self, block_hash, block):
-        if block is not None:
-            return block
+    async def fetch_block(self, block_hash):
         block_hex = block_hash.hex()
         path = os.path.join(self.cache_dir, block_hex)
         if os.path.exists(path):
             log.info(f'Found block in cache: "{block_hex}"')
+            # TODO(james7132): Use aiofiles here
             with open(path, 'rb') as f:
                 return f.read()
         fetched_block = await self.base_fetcher.get_block(block_hash)
@@ -86,15 +136,15 @@ class GzipBlockProcessor(BlockProcessor):
     def process_block(self, block_hash, block):
         log.info(f'Compressing block (gzip -{self.level}):'
                  f'"{block_hash.hex()}..."')
-        return zlib.compress(block, self.level)
+        return block_data._replace(block=zlib.compress(block, self.level))
 
 
 class GunzipBlockProcessor(BlockProcessor):
     """A BlockProcessor that decompresses gzip compressed blocks."""
 
-    def process_block(self, block_hash, block):
+    def process_block(self, block_data):
         log.info(f'Decompressing block (gzip): "{block_hash.hex()}..."')
-        return zlib.decompress(block, self.level)
+        return block_data.with_block(zlib.decompress(block, self.level))
 
 
 class ValidateBlockProcessor(BlockProcessor):
@@ -102,9 +152,9 @@ class ValidateBlockProcessor(BlockProcessor):
     assigned block hash.
     """
 
-    def process_block(self, block_hash, block):
-        b_hash = hash_block(block)
-        if b_hash != block_hash:
+    def process_block(self, block_data):
+        block_hash = hash_block(block_data.block)
+        if block_hash != block_data.hash:
             log.error(f'Block hash mismatch: "{block_hash.hex()}"'
                       f'vs "{b_hash.hex()}"')
             return None
