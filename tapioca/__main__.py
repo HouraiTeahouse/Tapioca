@@ -4,11 +4,15 @@ from tapioca.core.block_processors import BlockHasher
 from tapioca.core.block_sources import DirectorySource, ZipFileSource
 from google.protobuf import text_format
 from google.protobuf import json_format
+from concurrent.futures import ProcessPoolExecutor
 import asyncio
+import uvloop
 import click
 import logging
 import os
 
+
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 logging.basicConfig(level=logging.DEBUG,
                     # format='%(asctime)s %(levelname)s %(message)s',
@@ -27,9 +31,11 @@ def run():
 
 
 @run.command()
-# @click.option('path', help='The socket path for the server to bind to.')
-# @click.option('port', help='The network port for the server to bind to.')
-def deploy_server(path, port):
+@click.option('--path', default=lambda: os.environ.get('SERVER_SOCKET', None),
+              help='The socket path for the server to bind to.')
+@click.option('--port', default=lambda: os.environ.get('SERVER_PORT', None),
+              help='The network port for the server to bind to.')
+def server(path, port):
     import tapioca.deploy as deploy
     deploy.run_server(path=path, port=port)
 
@@ -56,7 +62,7 @@ def manifest(src, dst, format):
     }
     if format not in formats:
         click.echo(f'"{format}" is not a valid format type. Choose from: ' +
-                   f"'{','.join(formats.keys())}'");
+                   f"'{', '.join(formats.keys())}'")
         return
     with get_block_source(src) as block_source:
         manifest_sink = ManifestBlockSink()
@@ -65,5 +71,6 @@ def manifest(src, dst, format):
         proto = manifest_sink.build_manifest().to_proto()
         with open(dst, 'w+b') as f:
             f.write(formats[format](proto))
+
 
 cli()

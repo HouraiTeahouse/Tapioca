@@ -43,7 +43,7 @@ class BlockRegistry():
 
     def _register(self, block):
         if block.hash in self._block_map:
-            log.info('Collision found: {block.hash.hex()}')
+            log.info(f'Collision found: {block.hash.hex()}')
             idx = self._block_map[block.hash]
             assert block.size == self.blocks[idx].size
             return idx

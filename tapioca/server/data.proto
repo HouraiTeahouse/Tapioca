@@ -1,19 +1,19 @@
-syntax = "proto3";
+syntax = "proto2";
 
 import "tapioca/core/manifest.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
 message ProjectConfig {
-  uint32 id = 1;
-  uint32 default_branch = 2;
+  optional uint32 id = 1;
+  optional uint32 default_branch = 2;
   map<uint32, BranchConfig> branches = 3;
   // Required: Platform specific launch options. Map keys are Platform values.
   // These values are overriden by branch specific options if they are present.
   map<uint32, LaunchOptions> launch_options = 4;
-  GarbageCollectionPolicy garbage_collection_policy = 5;
+  optional GarbageCollectionPolicy garbage_collection_policy = 5;
   // Required: the URL prefix to download objects from.
-  string block_storage_prefix = 5;
+  optional string block_storage_prefix = 6;
 }
 
 // Determines the build purge policy of a project.
@@ -27,13 +27,13 @@ message GarbageCollectionPolicy {
   //
   // Exception: At least one build per branch/target combination will be
   // retained of what this is set to.
-  google.protobuf.duration retention_duration = 1;
+  optional google.protobuf.Duration retention_duration = 1;
 
   // The number of builds to retain per branch/target combionation. As new
   // builds are pushed.
   //
   // If not set, the value is assumed to be 1.
-  uint64 retained_builds = 2;
+  optional uint64 retained_builds = 2;
 }
 
 // Values are 16-bit integers:
@@ -49,7 +49,7 @@ enum Platform {
   MacOS_Universal = 0x0201;
   // Linux family ID: 0x0300
   Linux_Universal = 0x0301;
-  Linux_x64 = 0x0301;
+  Linux_x64 = 0x0302;
   // Apple platform family ID: 0x0400
   Apple_iOS = 0x0401;
   Apple_tvOS = 0x0402;
@@ -72,7 +72,7 @@ message LaunchOptions {
   // directory of the build.
   //
   // Note: path is seperated by '/' path seperator.
-  string executable = 1;
+  optional string executable = 1;
   // The additional command line flags used when launching on a platform.
   repeated string launch_flags = 2;
 }
@@ -81,12 +81,12 @@ message LaunchOptions {
 //     {4-byte Project ID} +
 //     {4-byte branch name fingerprint}
 message BranchConfig {
-  uint32 project_id = 1;
-  uint32 id = 2;
+  optional uint32 project_id = 1;
+  optional uint32 id = 2;
   // Source control branch name.
-  string name = 3;
+  optional string name = 3;
   // Optional: Human facing display name for the branch
-  string display_name = 4;
+  optional string display_name = 4;
   // Optional: Platform specific launch options. Map keys are Platform values.
   // Overrides project wide launch options when provided.
   map<uint32, LaunchOptions> launch_options = 5;
@@ -95,28 +95,28 @@ message BranchConfig {
 message BuildProto {
   message Metadata {
     // Required: The source control commit hash.
-    bytes source_commit = 1;
+    optional bytes source_commit = 1;
 
     // Reqired: The timestamp the build was created at.
-    google.protobuf.Timestamp build_timestamp = 2;
+    optional google.protobuf.Timestamp build_timestamp = 2;
 
     // Required: The target platform for the build
-    Platform platform = 3;
+    optional Platform platform = 3;
   }
 
   // ID: 14 bytes:
   //     {8-byte Branch ID} +
   //     {4-byte truncated SHA-1 of commit}
   //     {2-byte target} +
-  bytes id = 1;
+  optional bytes id = 1;
 
   // The build manifest
-  tapioca.core.ManifestProto manifest = 2;
+  optional tapioca.core.ManifestProto manifest = 2;
 
-  Metadata metadata = 3;
+  optional Metadata metadata = 3;
 
   // Information on how to launch the build.
-  LaunchOptions launch_options = 4;
+  optional LaunchOptions launch_options = 4;
 }
 
 // ID: 34 bytes:

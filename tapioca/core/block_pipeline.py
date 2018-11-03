@@ -4,6 +4,7 @@ from tapioca.core.manifest import BlockInfo
 import asyncio
 import inspect
 import traceback
+import threading
 
 
 def _append_async_tuple(lst, origin, func):
@@ -66,63 +67,54 @@ class BlockPipeline():
         _append_async_tuple(self.sinks, sink, lambda s: s.write_block)
         return self
 
-    async def _execute(self, is_async, func, executor):
+    async def _execute(self, is_async, func):
         try:
             if is_async:
                 return await func()
             else:
                 loop = asyncio.get_running_loop()
-                return await loop.run_in_executor(executor, func)
+                return await loop.run_in_executor(None, func)
         except Exception as e:
             # TODO(james7132): handle error
-            print(e)
-            traceback.print_exc()
+            logging.exception(e)
 
-    async def run_block(self, block_data, executor=None):
+    async def run_block(self, block_data):
         """Runs a block through the pipeline.
 
         Params:
           block-data (FileBlockData):
             the hash of the block to run though the pipeline.
-          executor (concurrent.futures.Executor):
-            Optional: a background executor to run synchronous operations in.
         """
         # Process the block
         for is_async, processor in self.processors:
             def task(): return processor.process_block(block_data)
-            block_data = await self._execute(is_async, task, executor)
+            block_data = await self._execute(is_async, task)
             if block_data is None:
                 return
 
         write_tasks = []
         for is_async, sink in self.sinks:
             def task(): sink.write_block(block_data)
-            write_tasks.append(self._execute(is_async, task, executor))
+            write_tasks.append(self._execute(is_async, task))
         await asyncio.gather(*write_tasks)
 
-    async def run(self, source, executor=None):
+    async def run(self, source, batch_size=10):
         """|coro|
         Runs multiple block through the pipeline in parallel.
 
         Params:
           source (list[bytes]):
             A BlockSource to read blocks from.
-          executor (concurrent.futures.Executor):
-            Optional: a background executor to run synchronous operations in.
         """
-        async def pipeline_run_async():
+        def run_pipeline_impl(loop):
             tasks = []
             for block_data in source.get_blocks():
-                tasks.append(self.run_block(block_data, executor))
-            await asyncio.gather(*tasks)
+                block_task = self.run_block(block_data)
+                task = asyncio.run_coroutine_threadsafe(block_task, loop)
+                tasks.append(task)
+            for task in tasks:
+                # Wait for the task to complete.
+                task.result()
 
-        def executor_coroutine():
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                return loop.run_until_complete(pipeline_run_async())
-            finally:
-                loop.close()
-
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(executor, executor_coroutine)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, run_pipeline_impl, loop)

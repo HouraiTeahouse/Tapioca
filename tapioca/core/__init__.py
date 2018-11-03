@@ -2,7 +2,7 @@ import hashlib
 import time
 import logging
 
-HASH_ALG = hashlib.sha1
+HASH_ALG = hashlib.sha256
 BLOCK_SIZE = 1024 ** 2
 
 log = logging.getLogger(__name__)
