@@ -1,4 +1,4 @@
-syntax = "proto3";
+syntax = "proto2";
 
 package tapioca.core;
 
@@ -6,21 +6,21 @@ message ManifestProto {
   repeated ManifestBlockProto blocks = 1;
   repeated ManifestItemProto items = 2;
   // Required: the maximum size of blocks within the build in bytes.
-  uint64 max_block_size = 3;
+  optional uint64 max_block_size = 3;
 }
 
 // A manifest descriptor for a block within a build
 message ManifestBlockProto {
   // The hash of the block
-  bytes hash = 1;
+  optional bytes hash = 1;
   // Optional: The size of the block. Only present when the size of the block is
   // not the max_block_size of the manifest.
-  uint64 size = 2;
+  optional uint64 size = 2;
 }
 
 // A manifest descriptor for a item (a file or directory) within a build
 message ManifestItemProto {
-  string name = 1;
+  optional string name = 1;
 
   // File only. The sequence of blocks that consitute the file. The ID corresponds to
   // the index of the block in the manifest.

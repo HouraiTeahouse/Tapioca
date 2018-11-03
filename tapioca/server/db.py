@@ -1,6 +1,6 @@
 from coders import IdentityCoder, ProtobufCoder
 from functools import lru_cache
-from tapioca.server.data_pb2mp import ProjectConfig, Build, BlockInfo
+from tapioca.server.data_pb2  import ProjectConfig, Build, BlockInfo
 import asyncio
 import hashlib
 import lmdb
@@ -82,7 +82,7 @@ async def save_build(build, request):
             builds.put(txn, build_key, build)
             for block in build.manifest.blocks:
                 save_block(txn, block, build_key)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, save_build_impl)
 
     # Invalidate the fetch cache
@@ -95,7 +95,7 @@ async def purge_build(build):
         with lmdb_env.begin(write=True) as txn:
             for block in build.manifest.blocks:
                 delete_build_block(txn, block, build_key)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, purge_build_impl)
 
 
@@ -114,7 +114,7 @@ async def is_block_dead(block):
             next_key = next(csr.iternext(value=False))
             return next_key.startswith(block.hash)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, is_block_dead_impl)
 
 

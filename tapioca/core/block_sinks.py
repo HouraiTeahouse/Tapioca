@@ -147,6 +147,7 @@ class ManifestBlockSink(BlockSink):
         self.file_accumulators = {}
 
     def write_block(self, block_data):
+        log.info('Writing block to Manifest')
         with self.manifest_lock:
             file_accumulator = self.file_accumulators.get(block_data.file)
             if file_accumulator is None:
