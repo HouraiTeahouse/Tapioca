@@ -124,7 +124,7 @@ class _FileAccumulator():
         self.lock = Lock()
 
     def add_block(self, block_data):
-        with self.lock.acquire():
+        with self.lock:
             self.pending_blocks.put(block_data)
             self._advance_accumulator()
 
@@ -132,10 +132,10 @@ class _FileAccumulator():
         # File **must** be locked to run this function
 
         # Peek at the fist item
-        while self.pending_blocks.queue[0].block_id == self.next_block_id:
-            block = self.pending_block.get()
-            self.builder.append_block(block.to_block_info())
-            self.builder.update_hash(file_block.block)
+        while self.pending_blocks.qsize() > 0 and \
+              self.pending_blocks.queue[0].block_id == self.next_block_id:
+            file_block = self.pending_blocks.get()
+            self.builder.append_block(file_block.to_block_info())
             self.next_block_id += 1
 
 
@@ -147,7 +147,7 @@ class ManifestBlockSink(BlockSink):
         self.file_accumulators = {}
 
     def write_block(self, block_data):
-        with self.manifest_lock.acquire():
+        with self.manifest_lock:
             file_accumulator = self.file_accumulators.get(block_data.file)
             if file_accumulator is None:
                 file_builder = self.builder.add_file(block_data.file)
@@ -159,7 +159,7 @@ class ManifestBlockSink(BlockSink):
         """Builds the manifest based on already processed block datas streamed
         into the sink.
         """
-        with self.manifest_lock.acquire():
+        with self.manifest_lock:
             return self.builder.build()
 
 # TODO(): Implement P2P block sink (IPFS?)

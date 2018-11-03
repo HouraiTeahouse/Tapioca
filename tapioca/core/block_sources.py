@@ -3,16 +3,20 @@ from tapioca.core.block_pipeline import FileBlockData
 from zipfile import ZipFile
 import logging
 import os
-
 log = logging.getLogger(__name__)
 
 
 class BlockSource():
     """An abstract class for reading blocks into BlockPipelines."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
     def get_blocks(self):
-        """
-        Returns: iterable[FileBlockData]
-        """
+        """Returns: iterable[FileBlockData]"""
         raise NotImplementedError
 
 
@@ -98,9 +102,9 @@ class ZipFileSource(BlockSource):
             self.zip_file.__exit__(*args)
 
     def get_blocks(self):
-        info_list = self.zip_file.info_list()
-        info_list = filter(info_list, lambda info: not info.is_dir())
-        for info in self.zip_file.infolist():
+        info_list = self.zip_file.infolist()
+        info_list = filter(lambda info: not info.is_dir(), info_list)
+        for info in info_list:
             file_descriptor = self.zip_file.open(info.filename)
             with FileBlockSource(info.filename, file_descriptor) as src:
                 yield from src.get_blocks()

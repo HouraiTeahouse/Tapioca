@@ -2,7 +2,8 @@ from tapioca.core.block_pipeline import BlockPipeline
 from tapioca.core.block_sinks import ManifestBlockSink
 from tapioca.core.block_processors import BlockHasher
 from tapioca.core.block_sources import DirectorySource, ZipFileSource
-
+from google.protobuf import text_format
+from google.protobuf import json_format
 import asyncio
 import click
 import logging
@@ -46,13 +47,23 @@ def get_block_source(src):
 @cli.command()
 @click.argument('src', nargs=1)
 @click.argument('dst', nargs=1)
-def manifest(src, dst):
-    manifest_sink = ManifestBlockSink()
-    pipeline = BlockPipeline().then(BlockHasher()).write_to(manifest_sink)
-    asyncio.run(pipeline.run(get_block_source(src)))
-    proto = manifest_sink.build_manifest().to_proto()
-    with open(dst, 'w+b') as f:
-        f.write(proto.SerializeToString())
-
+@click.option('--format', default='binary')
+def manifest(src, dst, format):
+    formats = {
+        'binary': lambda proto: proto.SerializeToString(),
+        'text': lambda proto: text_format.MessageToString(proto).encode(),
+        'json': lambda proto: json_format.MessageToJson(proto).encode(),
+    }
+    if format not in formats:
+        click.echo(f'"{format}" is not a valid format type. Choose from: ' +
+                   f"'{','.join(formats.keys())}'");
+        return
+    with get_block_source(src) as block_source:
+        manifest_sink = ManifestBlockSink()
+        pipeline = BlockPipeline().then(BlockHasher()).write_to(manifest_sink)
+        asyncio.run(pipeline.run(block_source))
+        proto = manifest_sink.build_manifest().to_proto()
+        with open(dst, 'w+b') as f:
+            f.write(formats[format](proto))
 
 cli()
