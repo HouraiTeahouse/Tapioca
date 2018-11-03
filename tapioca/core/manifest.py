@@ -110,7 +110,7 @@ class ItemTrie():
         current = self
         while len(path) > 0:
             prefix = path.pop()
-            if prefix not in self.children:
+            if prefix not in current.children:
                 child = ItemTrie(prefix, parent=current)
                 current.children[prefix] = child
             current = current.children[prefix]
@@ -143,7 +143,7 @@ class BlockInfo(namedtuple("BlockInfo", "hash size")):
         return proto
 
 
-class FileInfo(namedtuple('FileInfo', 'path blocks hash size')):
+class FileInfo(namedtuple('FileInfo', 'path blocks')):
 
     @staticmethod
     def from_proto(proto, manifest, path=None):
@@ -151,16 +151,12 @@ class FileInfo(namedtuple('FileInfo', 'path blocks hash size')):
           path=proto.name if path is None else path,
           blocks=tuple(BlockInfo.from_proto(manifest.blocks[idx])
                        for idx in proto.block_ids),
-          hash=proto.hash,
-          size=proto.size
         )
 
     def to_proto(self, block_registry, item_trie):
-        item = item_trie.add(self.path)
         block_ids = (block_registry.get_id(block) for block in self.blocks)
 
-        item.hash = self.hash
-        item.size = self.size
+        item = item_trie.add(self.path)
         del item.block_ids[:]
         item.block_ids.extend(block_ids)
         return item
@@ -339,9 +335,7 @@ class FileInfoBuilder():
 
     def __init__(self, path, max_block_size):
         self.path = path
-        self._hash_alg = HASH_ALG()
         self.blocks = []
-        self.size = 0
         self.max_block_size = max_block_size
 
     def append_block(self, block_info):
@@ -360,15 +354,6 @@ class FileInfoBuilder():
                     " max_block_size")
 
         self.blocks.append(block_info)
-        self.size += block_info.size
-
-    def update_hash(self, block):
-        """Updates the file hash with the next file block.
-
-        Parameters:
-            block (bytes-like object): the next block in the object.
-        """
-        self._hash_alg.update(block)
 
     def process_block(self, block):
         """A shortcut for proccessing the next block in the file.
@@ -382,10 +367,8 @@ class FileInfoBuilder():
         """
         block_info = BlockInfo(hash=hash_block(block), size=len(block))
         self.append_block(block_info)
-        self.update_hash(block)
         return block_info
 
     def build(self):
         """Builds a FileInfo."""
-        return FileInfo(path=self.path, blocks=tuple(self.blocks),
-                        hash=self._hash_alg.digest(), size=self.size)
+        return FileInfo(path=self.path, blocks=tuple(self.blocks))

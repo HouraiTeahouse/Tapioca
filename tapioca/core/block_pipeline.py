@@ -3,6 +3,7 @@ from tapioca.core import hash_block
 from tapioca.core.manifest import BlockInfo
 import asyncio
 import inspect
+import traceback
 
 
 def _append_async_tuple(lst, origin, func):
@@ -11,7 +12,8 @@ def _append_async_tuple(lst, origin, func):
 
 
 class FileBlockData(namedtuple("FileBlockData",
-                               "file block_id hash size block")):
+                               "file block_id hash size block",
+                               defaults=(None, None, None, None, None))):
 
     def with_block(self, block, update_hash=False):
         updated = self._replace(block=block, size=len(block))
@@ -69,36 +71,32 @@ class BlockPipeline():
             if is_async:
                 return await func()
             else:
-                return await asyncio.run_in_executor(executor, func)
-        except Exception:
+                loop = asyncio.get_running_loop()
+                return await loop.run_in_executor(executor, func)
+        except Exception as e:
             # TODO(james7132): handle error
-            pass
+            print(e)
+            traceback.print_exc()
 
-    async def run_block(self, block_hash, block, executor=None):
+    async def run_block(self, block_data, executor=None):
         """Runs a block through the pipeline.
 
         Params:
-          block_hash (bytes):
+          block-data (FileBlockData):
             the hash of the block to run though the pipeline.
-          block (bytes):
-            the block .
           executor (concurrent.futures.Executor):
             Optional: a background executor to run synchronous operations in.
         """
-        block = None
-
-        if block is None:
-            # TODO(james7132): handle error
-            return
-
         # Process the block
-        for is_async, processor in self.sources:
-            def task(): processor.process_block(block, block_hash)
-            block = await self._execute(is_async, task, executor)
+        for is_async, processor in self.processors:
+            def task(): return processor.process_block(block_data)
+            block_data = await self._execute(is_async, task, executor)
+            if block_data is None:
+                return
 
         write_tasks = []
         for is_async, sink in self.sinks:
-            def task(): sink.write_block(block, block_hash)
+            def task(): sink.write_block(block_data)
             write_tasks.append(self._execute(is_async, task, executor))
         await asyncio.gather(*write_tasks)
 
@@ -114,8 +112,8 @@ class BlockPipeline():
         """
         async def pipeline_run_async():
             tasks = []
-            for block_hash, block in source.get_blocks():
-                tasks.append(self.run_block(block_hash, block, executor))
+            for block_data in source.get_blocks():
+                tasks.append(self.run_block(block_data, executor))
             await asyncio.gather(*tasks)
 
         def executor_coroutine():
