@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from tapioca.core import hash_block
+from tapioca.core import hash_block, hash_encode
 import logging
 import os
 import zlib
@@ -86,7 +86,7 @@ class HttpBlockFetcher(BlockFetcher):
         self.session = session
 
     async def fetch_block(self, block_hash):
-        block_hex = block_hash.hex()
+        block_hex = hash_encode(block_hash)
         url = os.path.join(self.prefix, block_hex)
         # TODO(james7132): Error handling
         # TODO(james7132): Exponential fallback
@@ -112,7 +112,7 @@ class CachedBlockFetcher(BlockFetcher):
         self.cache_dir = cache_dir
 
     async def fetch_block(self, block_hash):
-        block_hex = block_hash.hex()
+        block_hex = hash_encode(block_hash)
         path = os.path.join(self.cache_dir, block_hex)
         if os.path.exists(path):
             log.info(f'Found block in cache: "{block_hex}"')
@@ -135,7 +135,7 @@ class GzipBlockProcessor(BlockProcessor):
 
     def process_block(self, block_hash, block):
         log.info(f'Compressing block (gzip -{self.level}):'
-                 f'"{block_hash.hex()}..."')
+                 f'"{hash_encode(block_hash)}..."')
         return block_data._replace(block=zlib.compress(block, self.level))
 
 
@@ -143,7 +143,7 @@ class GunzipBlockProcessor(BlockProcessor):
     """A BlockProcessor that decompresses gzip compressed blocks."""
 
     def process_block(self, block_data):
-        log.info(f'Decompressing block (gzip): "{block_hash.hex()}..."')
+        log.info(f'Decompressing block (gzip): "{hash_encode(block_hash)}..."')
         return block_data.with_block(zlib.decompress(block, self.level))
 
 
@@ -155,7 +155,7 @@ class ValidateBlockProcessor(BlockProcessor):
     def process_block(self, block_data):
         block_hash = hash_block(block_data.block)
         if block_hash != block_data.hash:
-            log.error(f'Block hash mismatch: "{block_hash.hex()}"'
-                      f'vs "{b_hash.hex()}"')
+            log.error(f'Block hash mismatch: "{hash_encode(block_hash)}"'
+                      f'vs "{hash_encode(b_hash)}"')
             return None
         return block
