@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from queue import PriorityQueue
 from threading import Lock
+from tapioca.core import hash_encode
 from tapioca.core.manifest import ManifestBuilder
 import logging
 import os
@@ -32,7 +33,7 @@ class NullBlockSink(BlockSink):
     seen.
     """
     def write_block(self, block_data):
-        log.info(f'Block: {block_data.block.hex()}')
+      log.info(f'Block: {hash_encode(block_data.block)}')
 
 
 class LocalStorageBlockSink(BlockSink):
@@ -49,7 +50,7 @@ class LocalStorageBlockSink(BlockSink):
         self.directory = directory
 
     def write_block(self, block_data):
-        path = os.path.join(self.directory, block_data.hash.hex())
+        path = os.path.join(self.directory, hash_encode(block_data.hash))
         if os.path.exists(path):
             # If the block is already stored, save some disk IO.
             return
@@ -69,8 +70,8 @@ class ObjectStorageBlockSink(BlockSink):
         self.prefix = prefix
 
     def write_block(self, block_data):
-        path = block_data.hash.hex()
-        if self.prefix is not None:
+        path = hash_encode(block_data.hash)
+        kif self.prefix is not None:
             path = os.path.join(self.prefix, path)
         self.bucket.upload_file(path, block_data.block)
 
