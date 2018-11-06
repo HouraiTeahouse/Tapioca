@@ -31,20 +31,23 @@ Tapioca clients check the game manifests on startup and ensure that the local
 copy is up to date with the latest build. If a new build is available, only the
 changed blocks are downloaded and patched into the local copy.
 
-Blocks are uniquely identified by their hash. Tapioca currently uses SHA-1 as
+Blocks are uniquely identified by their hash. Tapioca currently uses SHA-512 as
 its hashing algorithm. This has some nice properties:
 
  * This identifier is immutable for a given block, making it reasonable to
-   use with long or indefinite CDN cache TTLs.
+   aggressively cache the blocks in CDNs and other intermediate HTTP caches.
  * Identical blocks always have the same hash. This allows storing only one copy
    of the block for multiple builds and branches across a project.
  * As any machine is capable of running the hash, clients can independently
    verify the integrity of their local game files without needing to make any
    network calls to a server.
- * For the purposes of deduplication, SHA-1 is almost guaranteed to be unique.
-   Collision become likely at 2<sup>80</sup> or 10<sup>24</sup> hashes. As
-   Tapioca stores 1MB blocks, one would need to store 1,000,000 yottabytes before
-   a collision is likely to occur.
+ * For the purposes of deduplication, SHA-512 hashes are virtually guaranteed to
+   be unique. As Tapioca stores and operates on 1MB blocks, one would likely
+   need to store more data than the universe can hold before finding a effective
+   block collision.
+ * The SHA hash function family will soon see broad hardware acceleration
+   support, making game verification on clients faster. SHA-512 also generally
+   runs faster on 64-bit machines, compared to SHA-256.
 
 Blocks are compressed on upload. By default Tapioca is set to `gzip -9` blocks
 before upload to the object store.
