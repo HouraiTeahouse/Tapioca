@@ -14,21 +14,24 @@ log = logging.getLogger(__name__)
 
 
 def _generate_file_paths(root, manifest, path):
-    for item in root.children:
-        path.push(item.name)
+    for name, item in root.children.items():
         # Item is a file if it has defined block ids
         if len(item.blocks) > 0:
             assert len(item.children) <= 0
-            yield ("/".join(path), item)
-        else:
-            yield from _generate_file_paths(item, manifest, path)
+            yield (os.path.join(*path), item)
+            continue
+        path.push(item.name)
+        yield from _generate_file_paths(item, manifest, path)
         path.pop()
 
 
 def _generate_manifest_paths(manifest):
     """Enumreates the information of all of files described by a manifest."""
-    for root in manifest.items:
-        yield from _generate_file_paths(root, manifest, [root.name])
+    path = []
+    for name, root in manifest.items.items():
+        path.push(item.name)
+        yield from _generate_file_paths(root, manifest, path)
+        path.pop()
 
 
 class BlockRegistry():
@@ -92,13 +95,8 @@ class BlockRegistry():
 class ItemTrie():
     """A trie of items within a manifest."""
 
-    def __init__(self, name='', parent=None):
-        if parent is None:
-            self.item = ManifestItemProto()
-        else:
-            self.item = parent.item.children.add()
-        self.item.name = name
-        self.children = {}
+    def __init__(self, manifest):
+        self.manifest = manifest
 
     def add(self, path):
         """Adds a path to the trie. Returns the created Item."""
@@ -106,26 +104,14 @@ class ItemTrie():
         path = norm.split(os.sep)
         path.reverse()
 
-        # TODO(james7132): Handle errors
+        if len(path) <= 0:
+            # TODO(james7132): Raise errors
+            return
 
-        current = self
+        current = self.manifest.items[path.pop()]
         while len(path) > 0:
-            prefix = path.pop()
-            if prefix not in current.children:
-                child = ItemTrie(prefix, parent=current)
-                current.children[prefix] = child
-            current = current.children[prefix]
-        return current.item
-
-    def populate_manifest(self, manifest):
-        """Populates a manifest with item metadata.
-
-        Params:
-          manifest (Manifest):
-            A manifest proto to populate.
-        """
-        del manifest.items[:]
-        manifest.items.extend(self.item.children)
+            current = current.children[path.pop()]
+        return current
 
 
 class BlockInfo(namedtuple("BlockInfo", "hash size")):
@@ -150,7 +136,7 @@ class FileInfo(namedtuple('FileInfo', 'path blocks')):
     def from_proto(proto, manifest, path=None):
         return FileInfo(
             path=proto.name if path is None else path,
-            blocks=tuple(),
+            blocks=tuple(self._get_blocks(proto, manifest)),
         )
 
     def to_proto(self, block_registry, item_trie):
@@ -205,17 +191,17 @@ class Manifest():
         return manifest
 
     def to_proto(self):
+        manifest_proto = ManifestProto()
+
         block_registry = BlockRegistry()
-        item_trie = ItemTrie()
+        item_trie = ItemTrie(manifest_proto)
 
         for file_info in self.files:
             for block in file_info.blocks:
                 block_registry.register(block)
             file_info.to_proto(block_registry, item_trie)
 
-        manifest_proto = ManifestProto()
         block_registry.populate_manifest(manifest_proto)
-        item_trie.populate_manifest(manifest_proto)
 
         # Clean up redundant information in block sizes
         manifest_proto.max_block_size = self.max_block_size
