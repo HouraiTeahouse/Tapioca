@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from queue import PriorityQueue
 from threading import Lock
+from tapioca.core import hash_encode
 from tapioca.core.manifest import ManifestBuilder
 import logging
 import os
@@ -32,7 +33,7 @@ class NullBlockSink(BlockSink):
     seen.
     """
     def write_block(self, block_data):
-        log.info(f'Block: {block_data.block.hex()}')
+        log.info(f'Block: {hash_encode(block_data.block)}')
 
 
 class ConsoleBlockSink(BlockSink):
@@ -51,7 +52,7 @@ class LocalStorageBlockSink(BlockSink):
     """A BlockSink that writes blocks directly to a local directory.
 
     Will populate a directory with files, one for each block with the block's
-    hash hex digest as its name.
+    hash as its name.
 
     This sink will not replace existing files. If a path collision occurs, it
     assumes that the block has already been written and will attempt to save
@@ -61,7 +62,7 @@ class LocalStorageBlockSink(BlockSink):
         self.directory = directory
 
     def write_block(self, block_data):
-        path = os.path.join(self.directory, block_data.hash.hex())
+        path = os.path.join(self.directory, hash_encode(block_data.hash))
         if os.path.exists(path):
             # If the block is already stored, save some disk IO.
             return
@@ -84,7 +85,7 @@ class ObjectStorageBlockSink(BlockSink):
         if block_data.hash is None:
             log.error('Trying to write block to object storage without a hash')
             return
-        path = block_data.hash.hex()
+        path = hash_encode(block_data.hash)
         if self.prefix is not None:
             path = os.path.join(self.prefix, path)
         # TODO(james7132): Implement upload retry logic
