@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 def hash_encode(block_hash):
     """Produces a url-safe minimal encoding of the block hash."""
-    return base64.urlsafe_b64encode(block_hash).replace('=', '').encode()
+    return base64.urlsafe_b64encode(block_hash).replace(b'=', b'').decode()
 
 
 def hash_block(block):
