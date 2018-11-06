@@ -1,7 +1,13 @@
-from tapioca.core.block_pipeline import BlockPipeline
-from tapioca.core.block_sinks import ManifestBlockSink
-from tapioca.core.block_processors import BlockHasher
-from tapioca.core.block_sources import DirectorySource, ZipFileSource
+from b2blaze import B2
+from tapioca.core.blocks import BlockPipeline
+from tapioca.core.blocks import ManifestBlockSink
+from tapioca.core.blocks.block_sinks import ObjectStorageBlockSink
+from tapioca.core.blocks import ConsoleBlockSink
+from tapioca.core.blocks import BlockHasher
+from tapioca.core.blocks import DedupBlockProcessor
+from tapioca.core.blocks import GzipBlockProcessor
+from tapioca.core.blocks import DirectorySource, ZipFileSource
+from tapioca.core.storage import BackblazeBucket, ConsoleBucket
 from google.protobuf import text_format
 from google.protobuf import json_format
 from concurrent.futures import ProcessPoolExecutor
@@ -71,6 +77,37 @@ def manifest(src, dst, format):
         proto = manifest_sink.build_manifest().to_proto()
         with open(dst, 'w+b') as f:
             f.write(formats[format](proto))
+
+
+@cli.group()
+def upload():
+    pass
+
+
+@upload.command()
+@click.argument('src', nargs=1)
+@click.argument('bucket', nargs=1)
+@click.option('--key', default=None)
+@click.option('--application_key', default=None)
+@click.option('--prefix', default='')
+@click.option('--dry_run', is_flag=True, default=True)
+def backblaze(src, bucket, key, application_key, prefix, dry_run):
+    print(key, application_key)
+    backblaze = B2(key_id=key, application_key=application_key)
+    b2bucket = backblaze.buckets.get(bucket)
+    if dry_run:
+        block_bucket = ConsoleBucket()
+    else:
+        block_bucket = BackblazeBucket(b2bucket)
+    block_sink = ObjectStorageBlockSink(block_bucket, prefix=prefix)
+
+    with get_block_source(src) as block_source:
+        pipeline = BlockPipeline() \
+                .then(BlockHasher()) \
+                .then(DedupBlockProcessor()) \
+                .then(GzipBlockProcessor(level=9)) \
+                .write_to(block_sink)
+        asyncio.run(pipeline.run(block_source))
 
 
 cli()

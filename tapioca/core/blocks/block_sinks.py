@@ -1,7 +1,6 @@
 from abc import abstractmethod
 from queue import PriorityQueue
 from threading import Lock
-from tapioca.core import hash_encode
 from tapioca.core.manifest import ManifestBuilder
 import logging
 import os
@@ -33,7 +32,19 @@ class NullBlockSink(BlockSink):
     seen.
     """
     def write_block(self, block_data):
-      log.info(f'Block: {hash_encode(block_data.block)}')
+        log.info(f'Block: {block_data.block.hex()}')
+
+
+class ConsoleBlockSink(BlockSink):
+    """A BlockSink that outputs block information to the console."""
+    def __init__(self, fmt=None):
+        self.format = fmt
+
+    def write_block(self, block_data):
+        if self.format is None:
+            print(f'Block: {block_data}')
+        else:
+            print(self.format.format(**block_data._asdict()))
 
 
 class LocalStorageBlockSink(BlockSink):
@@ -50,7 +61,7 @@ class LocalStorageBlockSink(BlockSink):
         self.directory = directory
 
     def write_block(self, block_data):
-        path = os.path.join(self.directory, hash_encode(block_data.hash))
+        path = os.path.join(self.directory, block_data.hash.hex())
         if os.path.exists(path):
             # If the block is already stored, save some disk IO.
             return
@@ -70,9 +81,13 @@ class ObjectStorageBlockSink(BlockSink):
         self.prefix = prefix
 
     def write_block(self, block_data):
-        path = hash_encode(block_data.hash)
-        kif self.prefix is not None:
+        if block_data.hash is None:
+            log.error('Trying to write block to object storage without a hash')
+            return
+        path = block_data.hash.hex()
+        if self.prefix is not None:
             path = os.path.join(self.prefix, path)
+        # TODO(james7132): Implement upload retry logic
         self.bucket.upload_file(path, block_data.block)
 
 
