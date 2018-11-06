@@ -3,7 +3,7 @@ import time
 import logging
 import base64
 
-HASH_ALG = hashlib.sha256
+HASH_ALG = hashlib.sha512
 BLOCK_SIZE = 1024 ** 2
 
 log = logging.getLogger(__name__)
