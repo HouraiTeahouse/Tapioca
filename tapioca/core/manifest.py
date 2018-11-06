@@ -3,6 +3,7 @@ from tapioca.core import hash_block, hash_encode, HASH_ALG, BLOCK_SIZE
 from tapioca.core.manifest_pb2 import ManifestBlockProto
 from tapioca.core.manifest_pb2 import ManifestItemProto
 from tapioca.core.manifest_pb2 import ManifestProto
+from tapioca.core.manifest_pb2 import ManifestBlockRange
 import itertools
 import os
 import shutil
@@ -16,7 +17,7 @@ def _generate_file_paths(root, manifest, path):
     for item in root.children:
         path.push(item.name)
         # Item is a file if it has defined block ids
-        if len(item.block_ids) > 0:
+        if len(item.blocks) > 0:
             assert len(item.children) <= 0
             yield ("/".join(path), item)
         else:
@@ -148,18 +149,45 @@ class FileInfo(namedtuple('FileInfo', 'path blocks')):
     @staticmethod
     def from_proto(proto, manifest, path=None):
         return FileInfo(
-          path=proto.name if path is None else path,
-          blocks=tuple(BlockInfo.from_proto(manifest.blocks[idx])
-                       for idx in proto.block_ids),
+            path=proto.name if path is None else path,
+            blocks=tuple(),
         )
 
     def to_proto(self, block_registry, item_trie):
-        block_ids = (block_registry.get_id(block) for block in self.blocks)
-
         item = item_trie.add(self.path)
-        del item.block_ids[:]
-        item.block_ids.extend(block_ids)
+        del item.blocks[:]
+        item.blocks.extend(self._get_block_ranges(block_registry))
         return item
+
+    def _get_blocks(self, proto, manifest):
+        for block_range in proto.blocks:
+            start = block_range.start_id
+            end = start + block_range.size
+            if start < 0 or end > len(manifest.blocks):
+                raise IndexError('The block range described is not valid.')
+            for idx in range(start, end):
+                yield BlockInfo.from_proto(manifest.blocks[idx])
+
+    def _get_block_ranges(self, block_registry):
+        current_id = None
+        current_range = None
+        for block in self.blocks:
+            block_id = block_registry.get_id(block)
+            block_range = ManifestBlockRange(start_id=block_id)
+
+            if block_range.start_id == current_id:
+                current_range.size += block_range.size
+                current_id += block_range.size
+                continue
+
+            if current_range is not None:
+                yield current_range
+
+            current_range = block_range
+            current_id = block_range.start_id + block_range.size
+
+        if current_range is not None:
+            yield current_range
 
 
 class Manifest():
@@ -350,8 +378,8 @@ class FileInfoBuilder():
         """
         if block_info.size > self.max_block_size:
             raise RuntimeError(
-                    "Attempted to add a block bigger than the manifest's"
-                    " max_block_size")
+                "Attempted to add a block bigger than the manifest's"
+                " max_block_size")
 
         self.blocks.append(block_info)
 
