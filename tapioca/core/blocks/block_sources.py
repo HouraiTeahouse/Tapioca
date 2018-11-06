@@ -1,5 +1,5 @@
 from tapioca.core import BLOCK_SIZE
-from tapioca.core.block_pipeline import FileBlockData
+from tapioca.core.blocks import FileBlockData
 from zipfile import ZipFile
 import logging
 import os

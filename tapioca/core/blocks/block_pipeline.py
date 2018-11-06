@@ -4,6 +4,7 @@ from tapioca.core.manifest import BlockInfo
 import asyncio
 import inspect
 import traceback
+import logging
 import threading
 
 

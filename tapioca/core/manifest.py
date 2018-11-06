@@ -1,5 +1,5 @@
 from collections import namedtuple
-from tapioca.core import hash_block, HASH_ALG, BLOCK_SIZE
+from tapioca.core import hash_block, hash_encode, HASH_ALG, BLOCK_SIZE
 from tapioca.core.manifest_pb2 import ManifestBlockProto
 from tapioca.core.manifest_pb2 import ManifestItemProto
 from tapioca.core.manifest_pb2 import ManifestProto
@@ -43,7 +43,7 @@ class BlockRegistry():
 
     def _register(self, block):
         if block.hash in self._block_map:
-            log.info(f'Collision found: {block.hash.hex()}')
+            log.info(f'Collision found: {hash_encode(block.hash)}')
             idx = self._block_map[block.hash]
             assert block.size == self.blocks[idx].size
             return idx
