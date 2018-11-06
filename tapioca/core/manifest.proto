@@ -4,7 +4,7 @@ package tapioca.core;
 
 message ManifestProto {
   repeated ManifestBlockProto blocks = 1;
-  repeated ManifestItemProto items = 2;
+  map<string, ManifestItemProto> items = 2;
   // Required: the maximum size of blocks within the build in bytes.
   optional uint64 max_block_size = 3 [default = 1048576];
 }
@@ -20,13 +20,10 @@ message ManifestBlockProto {
 
 // A manifest descriptor for a item (a file or directory) within a build
 message ManifestItemProto {
-  optional string name = 1;
-
   // File only. The sequence of block ranges that consitute the file.
-  repeated ManifestBlockRange blocks = 2;
-
+  repeated ManifestBlockRange blocks = 1;
   // Directory only. All child nodes within the directory.
-  repeated ManifestItemProto children = 3;
+  map<string, ManifestItemProto> children = 2;
 }
 
 message ManifestBlockRange {
