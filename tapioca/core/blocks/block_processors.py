@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from tapioca.core import hash_block
+from tapioca.core import hash_block, hash_encode
 import logging
 import os
 import zlib
@@ -87,14 +87,14 @@ class HttpBlockFetcher(BlockFetcher):
         self.session = session
 
     async def fetch_block(self, block_hash):
-        block_hex = block_hash.hex()
-        url = os.path.join(self.prefix, block_hex)
+        block_suffix = hash_encode(block_hash)
+        url = os.path.join(self.prefix, block_suffix)
         # TODO(james7132): Error handling
         # TODO(james7132): Exponential fallback
-        log.info(f'Fetching block "{block_hex}" from {url}...')
+        log.info(f'Fetching block "{block_suffix}" from {url}...')
         async with self.session.get(url) as response:
             block = await response.read()
-            log.info(f'Fetched block "{block_hex}" from {url}.')
+            log.info(f'Fetched block "{block_suffix}" from {url}.')
             return block
 
 
@@ -113,10 +113,10 @@ class CachedBlockFetcher(BlockFetcher):
         self.cache_dir = cache_dir
 
     async def fetch_block(self, block_hash):
-        block_hex = block_hash.hex()
-        path = os.path.join(self.cache_dir, block_hex)
+        block_suffix = hash_encode(block_hash)
+        path = os.path.join(self.cache_dir, block_suffix)
         if os.path.exists(path):
-            log.info(f'Found block in cache: "{block_hex}"')
+            log.info(f'Found block in cache: "{block_suffix}"')
             # TODO(james7132): Use aiofiles here
             with open(path, 'rb') as f:
                 return f.read()
@@ -136,7 +136,7 @@ class GzipBlockProcessor(BlockProcessor):
 
     def process_block(self, block_data):
         log.info(f'Compressing block (gzip -{self.level}):'
-                 f'"{block_data.hash.hex()}..."')
+                 f'"{hash_encode(block_data.hash)}..."')
         return block_data._replace(block=zlib.compress(block_data.block,
                                                        self.level))
 
@@ -145,7 +145,7 @@ class GunzipBlockProcessor(BlockProcessor):
     """A BlockProcessor that decompresses gzip compressed blocks."""
 
     def process_block(self, block_data):
-        log.info(f'Decompressing block (gzip): "{block_hash.hex()}..."')
+        log.info(f'Decompressing block (gzip): "{hash_encode(block_hash)}..."')
         return block_data.with_block(zlib.decompress(block, self.level))
 
 
@@ -157,7 +157,7 @@ class ValidateBlockProcessor(BlockProcessor):
     def process_block(self, block_data):
         block_hash = hash_block(block_data.block)
         if block_hash != block_data.hash:
-            log.error(f'Block hash mismatch: "{block_hash.hex()}"'
-                      f'vs "{b_hash.hex()}"')
+            log.error(f'Block hash mismatch: "{hash_encode(block_hash)}"'
+                      f'vs "{hash_encode(b_hash)}"')
             return None
         return block
