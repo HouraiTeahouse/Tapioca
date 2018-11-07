@@ -1,15 +1,15 @@
 package tapioca
 
 type Manifest struct {
-  Files   map[string]ManifestFile
+	Files map[string]ManifestFile
 }
 
 type ManifestFile struct {
-  Path    string
-  Blocks  []ManifestBlock
+	Path   string
+	Blocks []ManifestBlock
 }
 
 type ManifestBlock struct {
-  Hash    BlockHash
-  Size    uint64
+	Hash BlockHash
+	Size uint64
 }

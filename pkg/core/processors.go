@@ -19,9 +19,9 @@ func HashBlockProcessor() BlockProcessor {
 		if block.Data == nil {
 			panic("Block does not have a defined data block")
 		}
-    var hash BlockHash
-    block.Hash = &hash
-    HashBlock(*block.Data, block.Hash)
+		var hash BlockHash
+		block.Hash = &hash
+		HashBlock(*block.Data, block.Hash)
 		return nil
 	}
 }
@@ -91,7 +91,7 @@ func ValidateBlockProcessor() BlockProcessor {
 		}
 
 		var hash BlockHash
-    HashBlock(*block.Data, &hash)
+		HashBlock(*block.Data, &hash)
 		if !bytes.Equal(hash[:], block.Hash[:]) {
 			return errors.New(
 				fmt.Sprintf("Block mismatch. (Expected: %s, Actual: %s)",
