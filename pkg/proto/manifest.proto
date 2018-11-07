@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package tapioca;
 
-option go_package = "pkg/core";
+option go_package = "pkg/proto";
 
 message TargetSet {
   repeated Target targets = 1;

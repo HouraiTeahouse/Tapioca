@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 
-	"github.com/HouraiTeahouse/Tapioca/pkg/core"
+	"github.com/HouraiTeahouse/Tapioca/pkg/blocks"
 )
 
 func main() {
 	block := []byte("Hello world!")
-	var hash tapioca.BlockHash
-	tapioca.HashBlock(block, &hash)
-	fmt.Println(tapioca.HashEncode(&hash))
+	var hash blocks.BlockHash
+	blocks.HashBlock(block, &hash)
+	fmt.Println(blocks.HashEncode(&hash))
 }

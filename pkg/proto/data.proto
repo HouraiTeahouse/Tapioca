@@ -1,10 +1,12 @@
 syntax = "proto2";
 
-import "pkg/core/manifest.proto";
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/duration.proto";
+package tapioca;
 
-option go_package = "pkg/core";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "pkg/proto/manifest.proto";
+
+option go_package = "pkg/proto";
 
 message ProjectConfig {
   optional uint32 id = 1;
