@@ -1,14 +1,9 @@
-FROM python:alpine as base
-FROM base as builder
-RUN apk add --no-cache protobuf-dev build-base
-COPY requirements.txt /
-RUN pip install --prefix /install -r /requirements.txt
-WORKDIR /app
-COPY . /app
-RUN protoc $(find . -type f -regex ".*\.proto") --python_out=.
+FROM golang:1.11.2-alpine3.8 as builder
+ADD . /go/src/github.com/HouraiTeahouse/Tapioca
+RUN cd /go/src/github.com/HouraiTeahouse/Tapioca/cmd/tapioca_manifest_gen && \
+  go build -o /bin/goapp
 
-FROM base
-COPY --from=builder /install /usr/local
-COPY --from=builder /app /app
+FROM alpine
 WORKDIR /app
-CMD ["python", "-m", "tapioca", "run", "server"]
+COPY --from=builder /bin/goapp /app
+ENTRYPOINT ./goapp
