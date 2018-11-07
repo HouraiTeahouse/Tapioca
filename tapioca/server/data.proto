@@ -36,37 +36,6 @@ message GarbageCollectionPolicy {
   optional uint64 retained_builds = 2;
 }
 
-// Values are 16-bit integers:
-//    Top byte is an identifier for a family of targets.
-//    Bottom byte is a specific target type within that family.
-//    Supports 256 targets within a target family.
-enum Platform {
-  // Windows family ID: 0x0100
-  Windows_x64 = 0x0101;
-  Windows_x86 = 0x0102;
-  Windows_AppStore = 0x0103;
-  // MacOS family ID: 0x0100
-  MacOS_Universal = 0x0201;
-  // Linux family ID: 0x0300
-  Linux_Universal = 0x0301;
-  Linux_x64 = 0x0302;
-  // Apple platform family ID: 0x0400
-  Apple_iOS = 0x0401;
-  Apple_tvOS = 0x0402;
-  // Android family ID: 0x0500
-  Andooid = 0x0501;
-  // WebGL family ID: 0x0600
-  WebGL = 0x0601;
-  // Sony Console family ID: 0x0700
-  PS4 = 0x0701;
-  PS_Vita = 0x0702;
-  // Microsoft console family ID: 0x0800
-  XboxOne = 0x0801;
-  // Nintendo console family ID: 0x0900
-  Nintendo_Switch = 0x0901;
-  Nintendo_3DS = 0x0902;
-}
-
 message LaunchOptions {
   // The path of game executable that is to be launched, relative to the root
   // directory of the build.

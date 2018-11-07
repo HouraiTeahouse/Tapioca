@@ -12,18 +12,10 @@ from google.protobuf import text_format
 from google.protobuf import json_format
 from concurrent.futures import ProcessPoolExecutor
 import asyncio
-import uvloop
 import click
-import logging
 import os
+import tapioca.config as config
 
-
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-logging.basicConfig(level=logging.DEBUG,
-                    # format='%(asctime)s %(levelname)s %(message)s',
-                    filename='tapioca.log',
-                    filemode='w')
 
 
 @click.group()
@@ -35,15 +27,23 @@ def cli():
 def run():
     pass
 
+@run.command()
+def client():
+    from tapioca import client
+    config.configure_client()
+    client.run_client()
+
 
 @run.command()
-@click.option('--path', default=lambda: os.environ.get('SERVER_SOCKET', None),
+@click.option('--socket', default=None, None),
               help='The socket path for the server to bind to.')
-@click.option('--port', default=lambda: os.environ.get('SERVER_PORT', None),
+@click.option('--port', default=None, None),
               help='The network port for the server to bind to.')
-def server(path, port):
-    import tapioca.deploy as deploy
-    deploy.run_server(path=path, port=port)
+def server(socket, port):
+    from tapioca import server
+    config.configure_server(socket, port)
+    server.run_server(path=path or config.SERVER_SOCKET
+                      port=port or config.SERVER_PORT)
 
 
 def get_block_source(src):
@@ -110,4 +110,5 @@ def backblaze(src, bucket, key, application_key, prefix, dry_run):
         asyncio.run(pipeline.run(block_source))
 
 
-cli()
+if __name__ == '__main__':
+    cli()
