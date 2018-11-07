@@ -9,10 +9,12 @@ env:
     - PROTO_VERSION="3.6.1"
 before_install:
 - bash install_protobuf.sh $PROTO_VERSION
+- go install -mod vendor github.com/golangci/golangci-lint/cmd/golangci-lint
 install:
 - bash -c "shopt -s globstar; $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --go_out=$(pwd) **/*.proto"
 - go get -t ./...
 script:
+- golangci-lint run
 - go test -v ./...
 notifications:
   email: false
