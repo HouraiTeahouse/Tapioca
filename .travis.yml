@@ -15,7 +15,7 @@ install:
 - bash -c "shopt -s globstar; $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --go_out=$(pwd) **/*.proto"
 - go get -t ./...
 script:
-- golangci-lint run
+- /bin/golangci-lint run
 - go test -v ./...
 notifications:
   email: false
