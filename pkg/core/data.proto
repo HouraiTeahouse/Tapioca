@@ -1,8 +1,10 @@
 syntax = "proto2";
 
-import "tapioca/core/manifest.proto";
+import "pkg/core/manifest.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+
+option go_package = "pkg/core";
 
 message ProjectConfig {
   optional uint32 id = 1;
@@ -70,7 +72,7 @@ message BuildProto {
     optional google.protobuf.Timestamp build_timestamp = 2;
 
     // Required: The target platform for the build
-    optional Platform platform = 3;
+    optional tapioca.Target target = 3;
   }
 
   // ID: 14 bytes:
@@ -80,7 +82,7 @@ message BuildProto {
   optional bytes id = 1;
 
   // The build manifest
-  optional tapioca.core.ManifestProto manifest = 2;
+  optional tapioca.ManifestProto manifest = 2;
 
   optional Metadata metadata = 3;
 
