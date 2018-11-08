@@ -5,6 +5,13 @@ import (
 	"os"
 )
 
+type BlockSourceResult struct {
+	Block *FileBlockData
+	Error error
+}
+
+type BlockSource func() (chan BlockSourceResult, error)
+
 func InMemoryBlockSource(blocks []FileBlockData) BlockSource {
 	return func() (chan BlockSourceResult, error) {
 		channel := make(chan BlockSourceResult)
@@ -36,12 +43,11 @@ func FileBlockSource(path string, chunkSize int) BlockSource {
 					}
 					break
 				}
-				blockData := buffer[:bytesread]
 				channel <- BlockSourceResult{
 					Block: &FileBlockData{
 						File:    path,
 						BlockId: blockId,
-						Data:    &blockData,
+						Data:    CreateBlock(buffer[:bytesread]),
 					},
 				}
 				blockId++

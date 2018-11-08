@@ -3,7 +3,6 @@ package blocks
 import (
 	"bytes"
 	"compress/zlib"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -11,53 +10,58 @@ import (
 	"sync"
 )
 
+type BlockProcessor func(block *FileBlockData) error
+
 func HashBlockProcessor() BlockProcessor {
 	return func(block *FileBlockData) error {
 		if block.Hash != nil {
 			return nil
 		}
-		if block.Data == nil {
-			panic("Block does not have a defined data block")
+		_, err := block.UpdateHash()
+		if err != nil {
+			return fmt.Errorf("Error while hashing block: %s", err)
 		}
-		var hash BlockHash
-		block.Hash = &hash
-		HashBlock(*block.Data, block.Hash)
 		return nil
 	}
 }
 
 func HTTPFetchBlockProcessor(prefix string) (BlockProcessor, error) {
-	base, err := url.Parse(prefix)
-	if err != nil {
-		return nil, err
-	}
 	var client http.Client
 	return func(block *FileBlockData) error {
-		if block.Hash != nil {
-			panic("Block does not have a defined hash")
-		}
-
-		uri, err := url.Parse(HashEncode(block.Hash))
+		address, err := getAddress(prefix, block)
 		if err != nil {
 			return err
 		}
-		endpoint := base.ResolveReference(uri)
-		response, err := client.Get(endpoint.String())
+		response, err := client.Get(address)
 		if err != nil {
 			return err
 		}
 		if response.StatusCode%100 != 2 {
-			// TODO(james7132): Handle HTTP errors
-			return errors.New(fmt.Sprintf("HTTP Error: %d", response.StatusCode))
+			return fmt.Errorf("HTTP Error: %d", response.StatusCode)
 		}
 		blockData, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			return err
 		}
 
-		block.Data = &blockData
+		block.Data = CreateBlock(blockData)
 		return nil
 	}, nil
+}
+
+func getAddress(prefix string, block *FileBlockData) (string, error) {
+	if block.Hash != nil {
+		return "", fmt.Errorf("Block does not have a defined hash")
+	}
+	base, err := url.Parse(prefix)
+	if err != nil {
+		return "", err
+	}
+	uri, err := url.Parse(block.Hash.String())
+	if err != nil {
+		return "", err
+	}
+	return base.ResolveReference(uri).String(), nil
 }
 
 func DedupBlockProcessor() BlockProcessor {
@@ -73,8 +77,7 @@ func DedupBlockProcessor() BlockProcessor {
 
 		_, err := seenHashes[*block.Hash]
 		if err {
-			return errors.New(
-				fmt.Sprintf("Identical hash found: %s", HashEncode(block.Hash)))
+			return fmt.Errorf("Identical hash found: %s", block.Hash)
 		}
 		seenHashes[*block.Hash] = true
 		return nil
@@ -83,20 +86,13 @@ func DedupBlockProcessor() BlockProcessor {
 
 func ValidateBlockProcessor() BlockProcessor {
 	return func(block *FileBlockData) error {
-		if block.Hash != nil {
-			return nil
+		hash, err := block.ComputeHash()
+		if err != nil {
+			return err
 		}
-		if block.Data == nil {
-			panic("Block does not have a defined data block")
-		}
-
-		var hash BlockHash
-		HashBlock(*block.Data, &hash)
-		if !bytes.Equal(hash[:], block.Hash[:]) {
-			return errors.New(
-				fmt.Sprintf("Block mismatch. (Expected: %s, Actual: %s)",
-					HashEncode(block.Hash),
-					HashEncode(&hash)))
+		if !block.Hash.Equal(hash) {
+			return fmt.Errorf("Block mismatch. (Expected: %s, Actual: %s)",
+				block.Hash, hash)
 		}
 		return nil
 	}
@@ -113,10 +109,10 @@ func ZlibCompressBlockProcessor(level int) BlockProcessor {
 		if err != nil {
 			return err
 		}
-		writer.Write(*block.Data)
+		writer.Write(block.Data.AsSlice())
 		writer.Close()
 
-		*block.Data = buffer.Bytes()
+		block.Data = CreateBlock(buffer.Bytes())
 		return nil
 	}
 }
@@ -127,7 +123,7 @@ func ZlibDecompressBlockProcessor() BlockProcessor {
 			panic("Block does not have a defined data block")
 		}
 
-		buffer := bytes.NewReader(*block.Data)
+		buffer := bytes.NewReader(block.Data.AsSlice())
 		reader, err := zlib.NewReader(buffer)
 		if err != nil {
 			return err
@@ -138,7 +134,7 @@ func ZlibDecompressBlockProcessor() BlockProcessor {
 			return err
 		}
 
-		*block.Data = decompressed
+		block.SetBlock(decompressed)
 		return nil
 	}
 }

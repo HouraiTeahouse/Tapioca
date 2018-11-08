@@ -7,8 +7,6 @@ import (
 )
 
 func main() {
-	block := []byte("Hello world!")
-	var hash blocks.BlockHash
-	blocks.HashBlock(block, &hash)
-	fmt.Println(blocks.HashEncode(&hash))
+	block := blocks.CreateBlock([]byte("Hello world!"))
+	fmt.Println(block.Hash())
 }
