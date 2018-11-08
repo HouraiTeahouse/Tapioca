@@ -12,48 +12,98 @@ type BlockPipeline struct {
 	Sinks []BlockProcessor
 }
 
+type pipelineWorker struct {
+  pipeline      *BlockPipeline
+  source        <-chan BlockSourceResult
+  errors        chan error
+  quit          chan struct{}
+}
+
 func (pipeline *BlockPipeline) Run(blocks BlockSource) error {
-	stream, err := blocks()
-	if err != nil {
-		return err
-	}
+  streams := make(chan (<-chan BlockSourceResult))
+  errors  := make(chan error)
 
 	var wg sync.WaitGroup
-	runBlock := func(block *FileBlockData) error {
-		defer wg.Done()
-		return pipeline.RunBlock(block)
-	}
-	for result := range stream {
-		if result.Error != nil {
-			return result.Error
-		}
-		wg.Add(1)
-		go runBlock(result.Block)
-	}
+  workers := make([]*pipelineWorker, 0, 1024)
+
+  for stream := range streams {
+    worker := new(pipelineWorker)
+    worker.source = stream
+    worker.errors = errors
+    worker.quit = make(chan struct{})
+    worker.Start(&wg)
+    workers = append(workers, worker)
+  }
+
+  kill := func() {
+    for _, worker := range workers {
+      worker.quit <- 0
+    }
+  }
+
+  for {
+
+  }
+
 	wg.Wait()
 	return nil
 }
 
 func (pipeline *BlockPipeline) RunBlock(block *FileBlockData) error {
+  err := pipeline.ProcessBlock(block)
+  if err != nil {
+    return err
+  }
+	return pipeline.WriteBlock(block)
+}
+
+func (pipeline *BlockPipeline) ProcessBlock(block *FileBlockData) error {
 	// Run the processors in sequence
 	for _, processor := range pipeline.Processors {
 		err := processor(block)
 		if err != nil {
-			// TODO(james7132): Handle error
 			return err
 		}
 	}
+  return nil
+}
 
-	// Write the results out in parallel
+func (pipeline *BlockPipeline) WriteBlock( block *FileBlockData) error {
 	var wg sync.WaitGroup
 	wg.Add(len(pipeline.Sinks))
-	sinkBlock := func(sink BlockProcessor) {
-		defer wg.Done()
-		sink(block)
-	}
 	for _, sink := range pipeline.Sinks {
-		go sinkBlock(sink)
+    // TODO(james7132): Backpropogate errors
+		go func() {
+      defer wg.Done()
+      sink(block)
+    } ()
 	}
 	wg.Wait()
-	return nil
+  return nil
+}
+
+func (worker pipelineWorker) Start(wg *sync.WaitGroup) {
+  wg.Add(1)
+  go func() {
+    defer wg.Done()
+    var result BlockSourceResult
+    for {
+      select {
+      case result := <-worker.source:
+        if result.Error != nil {
+          // An error has occuredA
+          worker.errors <- result.Error
+          return
+        }
+        go worker.RunBlock(result.Block)
+      }
+    }
+  } ()
+}
+
+func (worker pipelineWorker) RunBlock(block *FileBlockData) {
+  err := worker.pipeline.RunBlock(block)
+  if err != nil {
+    worker.errors <- err
+  }
 }

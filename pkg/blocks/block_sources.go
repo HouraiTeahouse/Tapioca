@@ -10,7 +10,7 @@ type BlockSourceResult struct {
 	Error error
 }
 
-type BlockSource func() (chan BlockSourceResult, error)
+type BlockSource func() (chan chan BlockSourceResult, error)
 
 func InMemoryBlockSource(blocks []FileBlockData) BlockSource {
 	return func() (chan BlockSourceResult, error) {
