@@ -8,9 +8,10 @@ WORKDIR /go/src/github.com/HouraiTeahouse/Tapioca
 ADD . /go/src/github.com/HouraiTeahouse/Tapioca
 COPY --from=proto_builder /proto_go /go/src/github.com/HouraiTeahouse/Tapioca
 WORKDIR /go/src/github.com/HouraiTeahouse/Tapioca/cmd/tapioca_manifest_gen
-RUN apk add --no-cache git && \
+RUN apk add --no-cache git upx && \
     go get -t ./... && \
-    go build -o /bin/goapp
+    go build -ldflags="-s -w" -o /bin/goapp && \
+    upx --brute /bin/goapp
 
 FROM alpine
 WORKDIR /app
