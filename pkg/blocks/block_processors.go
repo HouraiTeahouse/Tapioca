@@ -10,50 +10,48 @@ import (
 	"sync"
 )
 
-type BlockProcessor func(block *FileBlockData) error
-
 func HashBlockProcessor() BlockProcessor {
-	return func(block *FileBlockData) error {
+	return func(block *FileBlockData) (*FileBlockData, error) {
 		if block.Hash != nil {
-			return nil
+			return block, nil
 		}
 		_, err := block.UpdateHash()
 		if err != nil {
-			return fmt.Errorf("Error while hashing block: %s", err)
+			return nil, fmt.Errorf("Error while hashing block: %s", err)
 		}
-		return nil
+		return block, nil
 	}
 }
 
-func HTTPFetchBlockProcessor(prefix string) (BlockProcessor, error) {
+func HTTPFetchBlockProcessor(prefix string) BlockProcessor {
 	var client http.Client
-	return func(block *FileBlockData) error {
-		address, err := getAddress(prefix, block)
+	return func(block *FileBlockData) (*FileBlockData, error) {
+		address, err := getAddress(&prefix, block)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		response, err := client.Get(address)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if response.StatusCode%100 != 2 {
-			return fmt.Errorf("HTTP Error: %d", response.StatusCode)
+			return nil, fmt.Errorf("HTTP Error: %d", response.StatusCode)
 		}
 		blockData, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		block.Data = CreateBlock(blockData)
-		return nil
-	}, nil
+		return block, nil
+	}
 }
 
-func getAddress(prefix string, block *FileBlockData) (string, error) {
+func getAddress(prefix *string, block *FileBlockData) (string, error) {
 	if block.Hash != nil {
 		return "", fmt.Errorf("Block does not have a defined hash")
 	}
-	base, err := url.Parse(prefix)
+	base, err := url.Parse(*prefix)
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +65,7 @@ func getAddress(prefix string, block *FileBlockData) (string, error) {
 func DedupBlockProcessor() BlockProcessor {
 	seenHashes := make(map[BlockHash]bool)
 	var mutex sync.Mutex
-	return func(block *FileBlockData) error {
+	return func(block *FileBlockData) (*FileBlockData, error) {
 		if block.Hash != nil {
 			panic("Block does not have a defined hash")
 		}
@@ -77,29 +75,29 @@ func DedupBlockProcessor() BlockProcessor {
 
 		_, err := seenHashes[*block.Hash]
 		if err {
-			return fmt.Errorf("Identical hash found: %s", block.Hash)
+			return nil, fmt.Errorf("Identical hash found: %s", block.Hash)
 		}
 		seenHashes[*block.Hash] = true
-		return nil
+		return block, nil
 	}
 }
 
 func ValidateBlockProcessor() BlockProcessor {
-	return func(block *FileBlockData) error {
+	return func(block *FileBlockData) (*FileBlockData, error) {
 		hash, err := block.ComputeHash()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !block.Hash.Equal(hash) {
-			return fmt.Errorf("Block mismatch. (Expected: %s, Actual: %s)",
+			return nil, fmt.Errorf("Block mismatch. (Expected: %s, Actual: %s)",
 				block.Hash, hash)
 		}
-		return nil
+		return block, nil
 	}
 }
 
 func ZlibCompressBlockProcessor(level int) BlockProcessor {
-	return func(block *FileBlockData) error {
+	return func(block *FileBlockData) (*FileBlockData, error) {
 		if block.Data == nil {
 			panic("Block does not have a defined data block")
 		}
@@ -107,18 +105,18 @@ func ZlibCompressBlockProcessor(level int) BlockProcessor {
 		var buffer bytes.Buffer
 		writer, err := zlib.NewWriterLevel(&buffer, level)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		writer.Write(block.Data.AsSlice())
 		writer.Close()
 
 		block.Data = CreateBlock(buffer.Bytes())
-		return nil
+		return block, nil
 	}
 }
 
 func ZlibDecompressBlockProcessor() BlockProcessor {
-	return func(block *FileBlockData) error {
+	return func(block *FileBlockData) (*FileBlockData, error) {
 		if block.Data == nil {
 			panic("Block does not have a defined data block")
 		}
@@ -126,15 +124,15 @@ func ZlibDecompressBlockProcessor() BlockProcessor {
 		buffer := bytes.NewReader(block.Data.AsSlice())
 		reader, err := zlib.NewReader(buffer)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer reader.Close()
 		decompressed, err := ioutil.ReadAll(reader)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		block.SetBlock(decompressed)
-		return nil
+		return block, nil
 	}
 }
