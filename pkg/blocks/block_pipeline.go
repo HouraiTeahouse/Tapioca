@@ -11,6 +11,11 @@ type BlockCollection struct {
 	children  []*BlockCollection
 }
 
+type BlockPipelineExecution struct {
+	sync.WaitGroup
+	errors chan error
+}
+
 type BlockSource func(errors chan<- error) chan (<-chan *FileBlockData)
 type BlockProcessor func(block *FileBlockData) (*FileBlockData, error)
 
@@ -27,28 +32,59 @@ func (b *BlockCollection) ParDo(stageName string, p BlockProcessor) *BlockCollec
 	return collection
 }
 
-func (b *BlockCollection) Run(source <-chan *FileBlockData) <-chan error {
-	errors := make(chan error)
-	runner := b.newRunner(source, errors)
+func (b *BlockCollection) Run(source <-chan *FileBlockData) *BlockPipelineExecution {
+	execution := &BlockPipelineExecution{errors: make(chan error)}
+	runner := b.newRunner(source, execution)
 	runner.propogate()
-	return errors
+	go func() {
+		defer close(execution.errors)
+		execution.Wait()
+	}()
+	return execution
+}
+
+func (b *BlockCollection) RunAllFromSource(source BlockSource) *BlockPipelineExecution {
+	errors := make(chan error)
+	sourceErrors := make(chan error)
+	execution := &BlockPipelineExecution{errors: errors}
+	streams := source(sourceErrors)
+	go func() {
+		defer close(sourceErrors)
+		for {
+			select {
+			case channel, ok := <-streams:
+				if !ok {
+					break
+				}
+				runner := b.newRunner(channel, execution)
+				runner.propogate()
+			case <-sourceErrors:
+				// TODO(james7312): Handle error and cancel
+				panic("Error in fetching blocks!")
+			}
+		}
+		go func() {
+			defer close(errors)
+			execution.Wait()
+		}()
+	}()
+	return execution
 }
 
 type blockRunner struct {
 	BlockCollection
-	sync.WaitGroup
+	BlockPipelineExecution
 	input   <-chan *FileBlockData
 	outputs []chan *FileBlockData
-	errors  chan<- error
 }
 
 func (b *BlockCollection) newRunner(source <-chan *FileBlockData,
-	errors chan<- error) *blockRunner {
+	execution *BlockPipelineExecution) *blockRunner {
 	runner := &blockRunner{
-		BlockCollection: *b,
-		input:           source,
-		outputs:         make([]chan *FileBlockData, len(b.children)),
-		errors:          errors,
+		BlockCollection:        *b,
+		BlockPipelineExecution: *execution,
+		input:                  source,
+		outputs:                make([]chan *FileBlockData, len(b.children)),
 	}
 
 	// Make immutable copy of children in the case it is altered during execution
@@ -96,7 +132,7 @@ func (b *blockRunner) publish(block *FileBlockData) {
 
 func (b *blockRunner) propogate() {
 	for idx, child := range b.children {
-		runner := child.newRunner(b.outputs[idx], b.errors)
+		runner := child.newRunner(b.outputs[idx], &b.BlockPipelineExecution)
 		runner.propogate()
 	}
 	go b.start()

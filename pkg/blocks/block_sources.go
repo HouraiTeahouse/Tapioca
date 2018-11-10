@@ -1,14 +1,10 @@
 package blocks
 
 import (
+	"bufio"
 	"io"
 	"os"
 )
-
-type BlockSourceResult struct {
-	Block *FileBlockData
-	Error error
-}
 
 func ChannelBlockSource(blocks <-chan *FileBlockData) BlockSource {
 	return func(errors chan<- error) chan (<-chan *FileBlockData) {
@@ -29,7 +25,17 @@ func InMemoryBlockSource(blocks []FileBlockData) BlockSource {
 	}
 }
 
-func FileBlockSource(path string, chunkSize uint64) BlockSource {
+func ReaderBlockSource(reader io.Reader,
+	baseBlock FileBlockData,
+	chunkSize uint64) BlockSource {
+	bufRead := bufio.NewReader(reader)
+	return func(errors chan<- error) chan (<-chan *FileBlockData) {
+		channel := ReadBlocks(bufRead, baseBlock, chunkSize, errors)
+		return ChannelBlockSource(channel)(errors)
+	}
+}
+
+func DirectoryBlockSource(path string, chunkSize uint64) BlockSource {
 	return func(errors chan<- error) chan (<-chan *FileBlockData) {
 		file, err := os.Open(path)
 		if err != nil {
