@@ -21,6 +21,7 @@ type BlockProcessor func(block *FileBlockData) (*FileBlockData, error)
 
 func NewPipeline(stageName string, p BlockProcessor) *BlockCollection {
 	return &BlockCollection{
+		stageName: stageName,
 		processor: p,
 	}
 }
@@ -34,7 +35,7 @@ func (b *BlockCollection) ParDo(stageName string, p BlockProcessor) *BlockCollec
 
 func (b *BlockCollection) Run(source <-chan *FileBlockData) *BlockPipelineExecution {
 	execution := &BlockPipelineExecution{errors: make(chan error)}
-	runner := b.newRunner(source, execution)
+	runner := b.newRunner(source, *execution)
 	runner.propogate()
 	go func() {
 		defer close(execution.errors)
@@ -48,25 +49,27 @@ func (b *BlockCollection) RunAllFromSource(source BlockSource) *BlockPipelineExe
 	sourceErrors := make(chan error)
 	execution := &BlockPipelineExecution{errors: errors}
 	streams := source(sourceErrors)
+	execution.Add(1)
 	go func() {
 		defer close(sourceErrors)
+		defer execution.Done()
 		for {
 			select {
 			case channel, ok := <-streams:
 				if !ok {
-					break
+					return
 				}
-				runner := b.newRunner(channel, execution)
+				runner := b.newRunner(channel, *execution)
 				runner.propogate()
 			case <-sourceErrors:
 				// TODO(james7312): Handle error and cancel
 				panic("Error in fetching blocks!")
 			}
 		}
-		go func() {
-			defer close(errors)
-			execution.Wait()
-		}()
+	}()
+	go func() {
+		defer close(errors)
+		execution.Wait()
 	}()
 	return execution
 }
@@ -79,17 +82,17 @@ type blockRunner struct {
 }
 
 func (b *BlockCollection) newRunner(source <-chan *FileBlockData,
-	execution *BlockPipelineExecution) *blockRunner {
+	execution BlockPipelineExecution) *blockRunner {
 	runner := &blockRunner{
 		BlockCollection:        *b,
-		BlockPipelineExecution: *execution,
+		BlockPipelineExecution: execution,
 		input:                  source,
 		outputs:                make([]chan *FileBlockData, len(b.children)),
 	}
 
 	// Make immutable copy of children in the case it is altered during execution
 	runner.children = make([]*BlockCollection, len(runner.children))
-	copy(b.children, runner.children)
+	copy(runner.children, b.children)
 
 	// Create children channels
 	for idx, _ := range runner.children {
@@ -132,7 +135,7 @@ func (b *blockRunner) publish(block *FileBlockData) {
 
 func (b *blockRunner) propogate() {
 	for idx, child := range b.children {
-		runner := child.newRunner(b.outputs[idx], &b.BlockPipelineExecution)
+		runner := child.newRunner(b.outputs[idx], b.BlockPipelineExecution)
 		runner.propogate()
 	}
 	go b.start()

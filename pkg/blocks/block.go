@@ -1,5 +1,7 @@
 package blocks
 
+const DefaultBlockSize = 1024 * 1024
+
 type Block struct {
 	data []byte
 }

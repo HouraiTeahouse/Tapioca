@@ -5,10 +5,18 @@ import (
 	"compress/zlib"
 	"fmt"
 	"io/ioutil"
+	//"log"
 	"net/http"
 	"net/url"
 	"sync"
 )
+
+func PrintBlockProcessor() BlockProcessor {
+	return func(block *FileBlockData) (*FileBlockData, error) {
+		//log.Printf("%s", block)
+		return block, nil
+	}
+}
 
 func HashBlockProcessor() BlockProcessor {
 	return func(block *FileBlockData) (*FileBlockData, error) {

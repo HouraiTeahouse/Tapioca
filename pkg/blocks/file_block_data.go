@@ -2,6 +2,7 @@ package blocks
 
 import (
 	"errors"
+	"fmt"
 )
 
 type FileBlockData struct {
@@ -32,4 +33,12 @@ func (block *FileBlockData) UpdateHash() (*BlockHash, error) {
 	}
 	block.Hash = hash
 	return hash, nil
+}
+
+func (b *FileBlockData) String() string {
+	if b == nil {
+		return "Block: <nil>"
+	}
+	return fmt.Sprintf("Block: %s, %s, %d, %d, %d",
+		b.Hash, b.File, b.BlockId, b.Offset, b.Size)
 }

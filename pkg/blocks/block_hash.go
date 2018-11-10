@@ -14,8 +14,11 @@ type BlockHash struct {
 	hash [HashSize]byte
 }
 
-func (block *BlockHash) String() string {
-	return Encoding.EncodeToString(block.AsSlice())
+func (b *BlockHash) String() string {
+	if b == nil {
+		return "<nil>"
+	}
+	return Encoding.EncodeToString(b.AsSlice())
 }
 
 func (block *BlockHash) Equal(other *BlockHash) bool {

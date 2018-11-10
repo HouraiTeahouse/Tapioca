@@ -1,10 +1,21 @@
 package blocks
 
 import (
+	"archive/zip"
 	"bufio"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 )
+
+type FileReader struct {
+	io.Reader
+	io.Closer
+	BaseBlock FileBlockData
+	ChunkSize uint64
+	errors    chan<- error
+}
 
 func ChannelBlockSource(blocks <-chan *FileBlockData) BlockSource {
 	return func(errors chan<- error) chan (<-chan *FileBlockData) {
@@ -25,57 +36,111 @@ func InMemoryBlockSource(blocks []FileBlockData) BlockSource {
 	}
 }
 
-func ReaderBlockSource(reader io.Reader,
-	baseBlock FileBlockData,
-	chunkSize uint64) BlockSource {
-	bufRead := bufio.NewReader(reader)
+func ReaderBlockSource(reader FileReader) BlockSource {
 	return func(errors chan<- error) chan (<-chan *FileBlockData) {
-		channel := ReadBlocks(bufRead, baseBlock, chunkSize, errors)
-		return ChannelBlockSource(channel)(errors)
+		fileReader := reader
+		fileReader.errors = errors
+		return ChannelBlockSource(fileReader.ReadBlocks())(errors)
 	}
 }
 
-func DirectoryBlockSource(path string, chunkSize uint64) BlockSource {
+func DirectoryBlockSource(root string, chunkSize uint64) BlockSource {
 	return func(errors chan<- error) chan (<-chan *FileBlockData) {
-		file, err := os.Open(path)
-		if err != nil {
-			errors <- err
-			return nil
-		}
-		baseBlock := FileBlockData{File: path}
-		channel := ReadBlocks(file, baseBlock, chunkSize, errors)
-		return ChannelBlockSource(channel)(errors)
+		streams := make(chan (<-chan *FileBlockData))
+		go func() {
+			defer close(streams)
+			filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+				if info.IsDir() {
+					return nil
+				}
+				relpath, err := filepath.Rel(root, path)
+				if err != nil {
+					errors <- err
+					return err
+				}
+				file, err := os.Open(path)
+				if err != nil {
+					errors <- err
+					return err
+				}
+				streams <- (&FileReader{
+					Reader: file,
+					Closer: file,
+					BaseBlock: FileBlockData{
+						File: relpath,
+						Size: chunkSize,
+					},
+					ChunkSize: chunkSize,
+					errors:    errors,
+				}).ReadBlocks()
+				return nil
+			})
+		}()
+		return streams
 	}
 }
 
-func ReadBlocks(reader io.Reader,
-	baseBlock FileBlockData,
-	chunkSize uint64,
-	errors chan<- error) <-chan *FileBlockData {
+func ZipFileBlockSource(reader zip.Reader, chunkSize uint64) BlockSource {
+	return func(errors chan<- error) chan (<-chan *FileBlockData) {
+		streams := make(chan (<-chan *FileBlockData))
+		go func() {
+			defer close(streams)
+			for _, file := range reader.File {
+				if strings.HasSuffix(file.Name, "/") {
+					continue
+				}
+				rc, err := file.Open()
+				if err != nil {
+					errors <- err
+					return
+				}
+				streams <- (&FileReader{
+					Reader: rc,
+					Closer: rc,
+					BaseBlock: FileBlockData{
+						File: filepath.Clean(file.Name),
+						Size: chunkSize,
+					},
+					ChunkSize: chunkSize,
+					errors:    errors,
+				}).ReadBlocks()
+			}
+		}()
+		return streams
+	}
+}
+
+func (f *FileReader) ReadBlocks() <-chan *FileBlockData {
 	out := make(chan *FileBlockData)
+	r := bufio.NewReader(f.Reader)
 	go func() {
 		defer close(out)
-		var blockId uint64
-		var offset uint64
+		defer f.Close()
+
+		base := f.BaseBlock
+		base.BlockId = 0
+		base.Offset = 0
+
 		for {
-			buffer := make([]byte, chunkSize)
-			bytesread, err := reader.Read(buffer)
-			if err != nil {
-				if err != io.EOF {
-					errors <- err
-				}
-				break
-			}
+			// Create new buffer for next block
+			buf := make([]byte, f.ChunkSize)
+			n, err := io.ReadFull(r, buf)
 
-			block := baseBlock
-			block.BlockId = blockId
-			block.Offset = offset
-			block.SetBlock(buffer[:bytesread])
+			base.Size = uint64(n)
 
+			block := base
+			block.Data = CreateBlock(buf[:n])
 			out <- &block
 
-			blockId += 1
-			offset += uint64(bytesread)
+			base.BlockId++
+			base.Offset += base.Size
+
+			if err != nil {
+				if err != io.EOF && err != io.ErrUnexpectedEOF {
+					f.errors <- err
+				}
+				return
+			}
 		}
 	}()
 	return out
