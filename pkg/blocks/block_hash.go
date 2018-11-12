@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha512"
 	"encoding/base64"
+	"fmt"
 )
 
 const HashSize = sha512.Size
@@ -27,6 +28,16 @@ func (block *BlockHash) Equal(other *BlockHash) bool {
 
 func (block *BlockHash) AsSlice() []byte {
 	return block.hash[:]
+}
+
+func HashFromSlice(hash []byte) (*BlockHash, error) {
+	if hash == nil || len(hash) != HashSize {
+		return nil, fmt.Errorf("Cannot make BlockHash of size %d, received size %d",
+			len(hash), HashSize)
+	}
+	blockHash := new(BlockHash)
+	copy(hash, blockHash.hash[:HashSize])
+	return blockHash, nil
 }
 
 func HashBlock(data []byte) *BlockHash {

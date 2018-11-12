@@ -2,6 +2,7 @@ package blocks
 
 import (
 	"sync"
+  "log"
 )
 
 type BlockCollection struct {
@@ -14,6 +15,14 @@ type BlockCollection struct {
 type BlockPipelineExecution struct {
 	sync.WaitGroup
 	errors chan error
+}
+
+func (e *BlockPipelineExecution) LogErrors() {
+  go func() {
+    for err := range e.errors {
+      log.Printf("Pipeline error: %s", err)
+    }
+  } ()
 }
 
 type BlockSource func(errors chan<- error) chan (<-chan *FileBlockData)
@@ -112,12 +121,16 @@ func (b *blockRunner) start() {
 			if !ok {
 				break
 			}
-			block, err := b.processor(block)
-			if err != nil {
-				b.errors <- err
-				continue
-			}
-			b.publish(block)
+      b.Add(1)
+      go func() {
+        defer b.Done()
+        block, err := b.processor(block)
+        if err != nil {
+          b.errors <- err
+          return
+        }
+        b.publish(block)
+      } ()
 		}
 	}
 }

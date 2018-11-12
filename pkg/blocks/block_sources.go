@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bufio"
 	"io"
+	"log"
 	"os"
+  "sync"
 	"path/filepath"
 	"strings"
 )
@@ -40,7 +42,7 @@ func ReaderBlockSource(reader FileReader) BlockSource {
 	return func(errors chan<- error) chan (<-chan *FileBlockData) {
 		fileReader := reader
 		fileReader.errors = errors
-		return ChannelBlockSource(fileReader.ReadBlocks())(errors)
+		return ChannelBlockSource(fileReader.ReadBlocks(nil))(errors)
 	}
 }
 
@@ -49,6 +51,7 @@ func DirectoryBlockSource(root string, chunkSize uint64) BlockSource {
 		streams := make(chan (<-chan *FileBlockData))
 		go func() {
 			defer close(streams)
+      var wg sync.WaitGroup
 			filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 				if info.IsDir() {
 					return nil
@@ -63,6 +66,7 @@ func DirectoryBlockSource(root string, chunkSize uint64) BlockSource {
 					errors <- err
 					return err
 				}
+        wg.Add(1)
 				streams <- (&FileReader{
 					Reader: file,
 					Closer: file,
@@ -72,9 +76,10 @@ func DirectoryBlockSource(root string, chunkSize uint64) BlockSource {
 					},
 					ChunkSize: chunkSize,
 					errors:    errors,
-				}).ReadBlocks()
+				}).ReadBlocks(&wg)
 				return nil
 			})
+      wg.Wait()
 		}()
 		return streams
 	}
@@ -85,6 +90,7 @@ func ZipFileBlockSource(reader zip.Reader, chunkSize uint64) BlockSource {
 		streams := make(chan (<-chan *FileBlockData))
 		go func() {
 			defer close(streams)
+      var wg sync.WaitGroup
 			for _, file := range reader.File {
 				if strings.HasSuffix(file.Name, "/") {
 					continue
@@ -94,6 +100,7 @@ func ZipFileBlockSource(reader zip.Reader, chunkSize uint64) BlockSource {
 					errors <- err
 					return
 				}
+        wg.Add(1)
 				streams <- (&FileReader{
 					Reader: rc,
 					Closer: rc,
@@ -103,17 +110,21 @@ func ZipFileBlockSource(reader zip.Reader, chunkSize uint64) BlockSource {
 					},
 					ChunkSize: chunkSize,
 					errors:    errors,
-				}).ReadBlocks()
+				}).ReadBlocks(&wg)
 			}
+      wg.Wait()
 		}()
 		return streams
 	}
 }
 
-func (f *FileReader) ReadBlocks() <-chan *FileBlockData {
+func (f *FileReader) ReadBlocks(wg *sync.WaitGroup) <-chan *FileBlockData {
 	out := make(chan *FileBlockData)
 	r := bufio.NewReader(f.Reader)
 	go func() {
+    if wg != nil {
+      defer wg.Done()
+    }
 		defer close(out)
 		defer f.Close()
 
@@ -130,14 +141,16 @@ func (f *FileReader) ReadBlocks() <-chan *FileBlockData {
 
 			block := base
 			block.Data = CreateBlock(buf[:n])
-			out <- &block
+      log.Println(block)
+      out <- &block
 
 			base.BlockId++
 			base.Offset += base.Size
 
 			if err != nil {
 				if err != io.EOF && err != io.ErrUnexpectedEOF {
-					f.errors <- err
+					log.Fatal(err)
+					//f.errors <- err
 				}
 				return
 			}

@@ -1,4 +1,4 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package tapioca;
 
@@ -13,6 +13,7 @@ message TargetSet {
 //    Bottom byte is a specific target type within that family.
 //    Supports 256 targets within a target family.
 enum Target {
+  Any = 0;
   // Windows family ID: 0x0100
   Windows_x64 = 0x0101;
   Windows_x86 = 0x0102;
@@ -42,23 +43,23 @@ enum Target {
 message ManifestProto {
   repeated ManifestBlockProto blocks = 1;
   map<string, ManifestItemProto> items = 2;
-  optional ManifestMetadataProto metadata = 3;
+  ManifestMetadataProto metadata = 3;
 }
 
 message ManifestMetadataProto {
   // The targets the build is valid on.
   repeated Target targets = 1;
   // Required: the maximum size of blocks within the build in bytes.
-  optional uint64 max_block_size = 2 [default = 1048576];
+  uint64 max_block_size = 2;
 }
 
 // A manifest descriptor for a block within a build
 message ManifestBlockProto {
   // The hash of the block
-  optional bytes hash = 1;
+  bytes hash = 1;
   // Optional: The size of the block. Only present when the size of the block is
   // not the max_block_size of the manifest.
-  optional uint64 size = 2 [default = 1048576];
+  uint64 size = 2;
 }
 
 // A manifest descriptor for a item (a file or directory) within a build
@@ -72,7 +73,7 @@ message ManifestItemProto {
 message ManifestBlockRange {
   // The first block in the range. This is the index of the first block in the
   // range.
-  optional uint64 start_id = 1;
+  uint64 start_id = 1;
   // The number of blocks in the range.
-  optional uint64 size = 2 [default = 1];
+  uint64 size = 2;
 }
