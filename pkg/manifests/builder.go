@@ -166,3 +166,11 @@ func (b *FileBuilder) Build() (*ManifestFile, error) {
 	}
 	return &file, nil
 }
+
+func (b *ManifestBuilder) BuildProto() (*proto.ManifestProto, error) {
+  manifest, err := b.Build()
+  if err != nil {
+    return nil, err
+  }
+  return manifest.ToProto()
+}
