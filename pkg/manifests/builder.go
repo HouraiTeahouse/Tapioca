@@ -2,7 +2,6 @@ package manifests
 
 import (
 	"fmt"
-  "log"
 	"sync"
 
 	"github.com/HouraiTeahouse/Tapioca/pkg/blocks"
@@ -25,8 +24,8 @@ func (b *ManifestBuilder) AddFile(file string) *FileBuilder {
 	if builder, ok := b.Files[file]; ok {
 		return builder
 	}
-  builder := new(FileBuilder)
-  builder.Path = file
+	builder := new(FileBuilder)
+	builder.Path = file
 	b.Files[file] = builder
 	return builder
 }
@@ -36,7 +35,7 @@ func (b *ManifestBuilder) Build() (*Manifest, error) {
 	defer b.mutex.Unlock()
 
 	manifest := new(Manifest)
-  manifest.Files = make(map[string]ManifestFile)
+	manifest.Files = make(map[string]ManifestFile)
 	for path, file := range b.Files {
 		file, err := file.Build()
 		if err != nil {
@@ -78,10 +77,10 @@ func (b *ManifestBuilder) buildFiles(p *proto.ManifestItemProto,
 				return fmt.Errorf("Invalid block range: outside of valid block IDs.")
 			}
 			for i := start; i < end; i++ {
-        err := file.AddBlock(blockIndex, &blocks[i])
-        if err != nil {
-          return err
-        }
+				err := file.AddBlock(blockIndex, &blocks[i])
+				if err != nil {
+					return err
+				}
 				blockIndex++
 			}
 		}
@@ -132,9 +131,9 @@ func (b *FileBuilder) AddBlock(blockId uint64, block *ManifestBlock) error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-  if b.Blocks == nil {
-    b.Blocks = make(map[uint64]ManifestBlock)
-  }
+	if b.Blocks == nil {
+		b.Blocks = make(map[uint64]ManifestBlock)
+	}
 
 	if _, ok := b.Blocks[blockId]; ok {
 		return fmt.Errorf("File already has the block for ID %d written.", blockId)
@@ -159,18 +158,16 @@ func (b *FileBuilder) Build() (*ManifestFile, error) {
 		id++
 	}
 	if len(file.Blocks) != len(b.Blocks) {
-    log.Printf("Invalid FileBilder (%s): missing blocks: %d vs %d",
-      file.Path, len(file.Blocks), len(b.Blocks))
-    return nil, fmt.Errorf("Invalid FileBilder (%s): missing blocks: %d vs %d",
-      file.Path, len(file.Blocks), len(b.Blocks))
+		return nil, fmt.Errorf("Invalid FileBilder (%s): missing blocks: %d vs %d",
+			file.Path, len(file.Blocks), len(b.Blocks))
 	}
 	return &file, nil
 }
 
 func (b *ManifestBuilder) BuildProto() (*proto.ManifestProto, error) {
-  manifest, err := b.Build()
-  if err != nil {
-    return nil, err
-  }
-  return manifest.ToProto()
+	manifest, err := b.Build()
+	if err != nil {
+		return nil, err
+	}
+	return manifest.ToProto()
 }

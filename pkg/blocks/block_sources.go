@@ -6,9 +6,9 @@ import (
 	"io"
 	"log"
 	"os"
-  "sync"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 type FileReader struct {
@@ -51,7 +51,7 @@ func DirectoryBlockSource(root string, chunkSize uint64) BlockSource {
 		streams := make(chan (<-chan *FileBlockData))
 		go func() {
 			defer close(streams)
-      var wg sync.WaitGroup
+			var wg sync.WaitGroup
 			filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 				if info.IsDir() {
 					return nil
@@ -66,7 +66,7 @@ func DirectoryBlockSource(root string, chunkSize uint64) BlockSource {
 					errors <- err
 					return err
 				}
-        wg.Add(1)
+				wg.Add(1)
 				streams <- (&FileReader{
 					Reader: file,
 					Closer: file,
@@ -79,7 +79,7 @@ func DirectoryBlockSource(root string, chunkSize uint64) BlockSource {
 				}).ReadBlocks(&wg)
 				return nil
 			})
-      wg.Wait()
+			wg.Wait()
 		}()
 		return streams
 	}
@@ -90,7 +90,7 @@ func ZipFileBlockSource(reader zip.Reader, chunkSize uint64) BlockSource {
 		streams := make(chan (<-chan *FileBlockData))
 		go func() {
 			defer close(streams)
-      var wg sync.WaitGroup
+			var wg sync.WaitGroup
 			for _, file := range reader.File {
 				if strings.HasSuffix(file.Name, "/") {
 					continue
@@ -100,7 +100,7 @@ func ZipFileBlockSource(reader zip.Reader, chunkSize uint64) BlockSource {
 					errors <- err
 					return
 				}
-        wg.Add(1)
+				wg.Add(1)
 				streams <- (&FileReader{
 					Reader: rc,
 					Closer: rc,
@@ -112,7 +112,7 @@ func ZipFileBlockSource(reader zip.Reader, chunkSize uint64) BlockSource {
 					errors:    errors,
 				}).ReadBlocks(&wg)
 			}
-      wg.Wait()
+			wg.Wait()
 		}()
 		return streams
 	}
@@ -122,9 +122,9 @@ func (f *FileReader) ReadBlocks(wg *sync.WaitGroup) <-chan *FileBlockData {
 	out := make(chan *FileBlockData)
 	r := bufio.NewReader(f.Reader)
 	go func() {
-    if wg != nil {
-      defer wg.Done()
-    }
+		if wg != nil {
+			defer wg.Done()
+		}
 		defer close(out)
 		defer f.Close()
 
@@ -141,8 +141,8 @@ func (f *FileReader) ReadBlocks(wg *sync.WaitGroup) <-chan *FileBlockData {
 
 			block := base
 			block.Data = CreateBlock(buf[:n])
-      log.Println(block)
-      out <- &block
+			log.Println(block)
+			out <- &block
 
 			base.BlockId++
 			base.Offset += base.Size

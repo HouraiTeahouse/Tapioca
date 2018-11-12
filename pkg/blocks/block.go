@@ -8,7 +8,7 @@ type Block struct {
 
 func CreateBlock(data []byte) *Block {
 	block := new(Block)
-	block.data = data
+	block.Update(data)
 	return block
 }
 
@@ -17,7 +17,9 @@ func (block *Block) Size() uint64 {
 }
 
 func (block *Block) Update(data []byte) {
-	block.data = data
+	temp := make([]byte, len(data))
+	copy(temp, data)
+	block.data = temp
 }
 
 func (block *Block) AsSlice() []byte {

@@ -25,6 +25,11 @@ func main() {
 		log.Fatal(err)
 	}
 	defer rc.Close()
+
+	//processors := []block.BlockProcessor {
+
+	//}
+
 	var wg sync.WaitGroup
 	builder := manifests.ManifestBuilder{}
 	for _, file := range rc.File {
@@ -39,21 +44,26 @@ func main() {
 		go func(name string, f io.ReadCloser) {
 			defer f.Close()
 			defer wg.Done()
-			r := bufio.NewReader(rc)
-			buf := make([]byte, 1024*1024)
+			r := bufio.NewReader(f)
 			var blockId uint64 = 0
+			buf := make([]byte, 1024*1024)
 			manifestFile := builder.AddFile(name)
 			for {
 				n, err := io.ReadFull(r, buf)
 				block := blocks.CreateBlock(buf[:n])
-				//log.Printf("Block: %s %d", name, blockId)
-				blockErr := manifestFile.AddBlock(blockId, &manifests.ManifestBlock{
-					Hash: *block.Hash(),
-					Size: block.Size(),
-				})
-				if blockErr != nil {
-					log.Fatal(blockErr)
-				}
+
+				wg.Add(1)
+				go func(id uint64) {
+					defer wg.Done()
+
+					blockErr := manifestFile.AddBlock(id, &manifests.ManifestBlock{
+						Hash: *block.Hash(),
+						Size: block.Size(),
+					})
+					if blockErr != nil {
+						log.Fatal(blockErr)
+					}
+				}(blockId)
 
 				if err != nil {
 					if err != io.EOF && err != io.ErrUnexpectedEOF {
@@ -72,3 +82,13 @@ func main() {
 	}
 	log.Println(proto.MarshalTextString(manifestProto))
 }
+
+//func RunProcessors(b *FileBlockData, p []blocks.BlockProcessor) error {
+//for _, processor := range p {
+//b, err := processor(b)
+//if err != nil {
+//return err
+//}
+//return err
+//}
+//}

@@ -41,23 +41,17 @@ func (m *Manifest) ToProto() (*proto.ManifestProto, error) {
 				id = uint64(len(manifestProto.Blocks))
 				blockIds[hash] = id
 			}
-			if blockRange == nil {
-				blockRange = &proto.ManifestBlockRange{
-					StartId: id,
-					Size:    1,
-				}
-			} else if id == blockRange.StartId+blockRange.Size {
+			if blockRange != nil && id == blockRange.StartId+blockRange.Size {
 				// Block is the next in line, extend the block range
 				blockRange.Size++
 			} else {
-				// Block is discontinuous
-				item.Blocks = append(item.Blocks, blockRange)
+				// Two cases here:
+				// - First block in the file (blockRange is nil)
+				// - File is discontinuous, start new range.
 				blockRange = &proto.ManifestBlockRange{
 					StartId: id,
 					Size:    1,
 				}
-			}
-			if blockRange != nil {
 				item.Blocks = append(item.Blocks, blockRange)
 			}
 		}
