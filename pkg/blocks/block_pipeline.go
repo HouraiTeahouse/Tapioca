@@ -1,163 +1,172 @@
 package blocks
 
 import (
-	"log"
+	"archive/zip"
+	"bufio"
+	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
-type BlockCollection struct {
-	stageName string
-	processor BlockProcessor
-	parent    *BlockCollection
-	children  []*BlockCollection
-}
-
-type BlockPipelineExecution struct {
+type BlockPipeline struct {
+	context.Context
 	sync.WaitGroup
-	errors chan error
+	ChunkSize uint64
+	Blocks    chan *FileBlockData
 }
 
-func (e *BlockPipelineExecution) LogErrors() {
-	go func() {
-		for err := range e.errors {
-			log.Printf("Pipeline error: %s", err)
-		}
-	}()
-}
+type BlockProcessor func(b *FileBlockData) (*FileBlockData, error)
 
-type BlockSource func(errors chan<- error) chan (<-chan *FileBlockData)
-type BlockProcessor func(block *FileBlockData) (*FileBlockData, error)
-
-func NewPipeline(stageName string, p BlockProcessor) *BlockCollection {
-	return &BlockCollection{
-		stageName: stageName,
-		processor: p,
+func NewBlockPipeline(ctx context.Context, chunkSize uint64, bufferSize int) *BlockPipeline {
+	return &BlockPipeline{
+		Context:   ctx,
+		ChunkSize: chunkSize,
+		Blocks:    make(chan *FileBlockData, bufferSize),
 	}
 }
 
-func (b *BlockCollection) ParDo(stageName string, p BlockProcessor) *BlockCollection {
-	collection := NewPipeline(stageName, p)
-	collection.parent = b
-	b.children = append(b.children, collection)
-	return collection
+func (b *BlockPipeline) FromSlice(blocks []FileBlockData) *BlockPipeline {
+	for idx, _ := range blocks {
+		b.Blocks <- &blocks[idx]
+	}
+	return b
 }
 
-func (b *BlockCollection) Run(source <-chan *FileBlockData) *BlockPipelineExecution {
-	execution := &BlockPipelineExecution{errors: make(chan error)}
-	runner := b.newRunner(source, *execution)
-	runner.propogate()
+func (b *BlockPipeline) FromZip(r *zip.Reader) *BlockPipeline {
+	b.Add(1)
+	g, ctx := errgroup.WithContext(b.Context)
+	for _, file := range r.File {
+		if strings.HasSuffix(file.Name, "/") {
+			continue
+		}
+		f := file
+		g.Go(func() error {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+			return b.processReader(ctx, f.Name, rc)
+		})
+	}
 	go func() {
-		defer close(execution.errors)
-		execution.Wait()
+		defer b.WaitGroup.Done()
+		defer close(b.Blocks)
+		g.Wait()
 	}()
-	return execution
+	return b
 }
 
-func (b *BlockCollection) RunAllFromSource(source BlockSource) *BlockPipelineExecution {
-	errors := make(chan error)
-	sourceErrors := make(chan error)
-	execution := &BlockPipelineExecution{errors: errors}
-	streams := source(sourceErrors)
-	execution.Add(1)
+func (b *BlockPipeline) FromDirectory(root string) *BlockPipeline {
+	b.Add(1)
+	g, ctx := errgroup.WithContext(b.Context)
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		g.Go(func() error {
+			rc, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+			return b.processReader(ctx, relPath, rc)
+		})
+    return nil
+	})
 	go func() {
-		defer close(sourceErrors)
-		defer execution.Done()
-		for {
+		defer b.WaitGroup.Done()
+		defer close(b.Blocks)
+		g.Wait()
+	}()
+	return b
+}
+
+func (b *BlockPipeline) processReader(parent context.Context, name string, r io.Reader) error {
+	r = bufio.NewReader(r)
+	var blockId uint64 = 0
+	var offset uint64 = 0
+	g, ctx := errgroup.WithContext(parent)
+	buf := make([]byte, b.ChunkSize)
+	for {
+		n, err := io.ReadFull(r, buf)
+		block := CreateBlock(buf[:n])
+
+		fileBlock := &FileBlockData{
+			File:    name,
+			Offset:  offset,
+			BlockId: blockId,
+			Size:    block.Size(),
+			Data:    block,
+		}
+		g.Go(func() error {
 			select {
-			case channel, ok := <-streams:
-				if !ok {
-					return
-				}
-				runner := b.newRunner(channel, *execution)
-				runner.propogate()
-			case <-sourceErrors:
-				// TODO(james7312): Handle error and cancel
-				panic("Error in fetching blocks!")
+			case b.Blocks <- fileBlock:
+			case <-ctx.Done():
+			}
+			return nil
+		})
+
+		if err != nil {
+			if err != io.EOF && err != io.ErrUnexpectedEOF {
+				return err
+			}
+			return nil
+		}
+		blockId++
+		offset += block.Size()
+	}
+	return g.Wait()
+}
+
+func (b *BlockPipeline) RunBatch(p []BlockProcessor) error {
+	return b.Run(func(b *FileBlockData) (*FileBlockData, error) {
+		for _, processor := range p {
+			var err error
+			b, err = processor(b)
+			if err != nil {
+				return nil, err
 			}
 		}
-	}()
-	go func() {
-		defer close(errors)
-		execution.Wait()
-	}()
-	return execution
+		return b, nil
+	})
 }
 
-type blockRunner struct {
-	BlockCollection
-	BlockPipelineExecution
-	input   <-chan *FileBlockData
-	outputs []chan *FileBlockData
-}
+func (b *BlockPipeline) Run(p BlockProcessor) error {
+	g, ctx := errgroup.WithContext(b.Context)
 
-func (b *BlockCollection) newRunner(source <-chan *FileBlockData,
-	execution BlockPipelineExecution) *blockRunner {
-	runner := &blockRunner{
-		BlockCollection:        *b,
-		BlockPipelineExecution: execution,
-		input:                  source,
-		outputs:                make([]chan *FileBlockData, len(b.children)),
-	}
-
-	// Make immutable copy of children in the case it is altered during execution
-	runner.children = make([]*BlockCollection, len(runner.children))
-	copy(runner.children, b.children)
-
-	// Create children channels
-	for idx, _ := range runner.children {
-		runner.outputs[idx] = make(chan *FileBlockData)
-	}
-	return runner
-}
-
-func (b *blockRunner) start() {
-	// Close utput channels on exit
-	defer b.Close()
-	defer b.Wait()
-
+loop:
 	for {
 		select {
-		case block, ok := <-b.input:
+		case file, ok := <-b.Blocks:
 			if !ok {
-				break
+				break loop
 			}
-			b.Add(1)
-			go func() {
-				defer b.Done()
-				block, err := b.processor(block)
+			f := file
+			g.Go(func() error {
+				var err error
+				_, err = p(f)
 				if err != nil {
-					b.errors <- err
-					return
+					return err
 				}
-				b.publish(block)
-			}()
+				return nil
+			})
+		case <-ctx.Done():
+			break
 		}
 	}
-}
-
-func (b *blockRunner) publish(block *FileBlockData) {
-	// Push results to next stages
-	for _, output := range b.outputs {
-		b.Add(1)
-		go func(o chan *FileBlockData) {
-			defer b.Done()
-			o <- block
-		}(output)
-	}
-}
-
-func (b *blockRunner) propogate() {
-	for idx, child := range b.children {
-		runner := child.newRunner(b.outputs[idx], b.BlockPipelineExecution)
-		runner.propogate()
-	}
-	go b.start()
-}
-
-// impl: io.Closer
-func (b *blockRunner) Close() error {
-	for _, output := range b.outputs {
-		close(output)
+	b.Wait()
+	if err := g.Wait(); err != nil {
+		return err
 	}
 	return nil
 }
