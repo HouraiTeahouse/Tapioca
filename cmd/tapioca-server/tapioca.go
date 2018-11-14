@@ -7,12 +7,13 @@ import (
 	"github.com/soheilhy/cmux"
 	"golang.org/x/sync/errgroup"
 	"log"
+	"net"
 	"net/http"
 	"time"
 )
 
 var (
-	port = flags.StringVar("port", "8080", "The port to expose the server on")
+	port = flag.String("port", "8080", "The port to expose the server on")
 )
 
 func serveHttp(l net.Listener) error {

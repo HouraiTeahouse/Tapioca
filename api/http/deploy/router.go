@@ -2,9 +2,9 @@ package deploy
 
 import (
 	"github.com/gorilla/mux"
+	"net/http"
+  "fmt"
 	"strconv"
-
-	ucb "github.com/HouraiTeahouse/Tapioca/api/http/deploy/unity-cloud-build"
 )
 
 type Deployment struct {
@@ -17,50 +17,78 @@ type DeploymentHandler interface {
 	Deploy(d *Deployment, r *http.Request) error
 }
 
-func Init(m *mux.Router) {
-	createDeploymentRoutes(m.PathPrefix("/unity-cloud-build").Subrouter(),
-		ucb.DeployHandler())
+var (
+	router   *mux.Router = nil
+	handlers             = map[string]DeploymentHandler{
+		"unity-cloud-build": UnityCloudBuildHandler{},
+	}
+)
+
+func Init(r *mux.Router) {
+	router = r
+	routes := []string{
+		"/{project_id}",
+		"/{project_id}/{branch}",
+		"/{project_id}/{branch}/{target}",
+	}
+	for _, route := range routes {
+		router.HandleFunc(route, handleDeploy).Methods("POST")
+	}
 }
 
-func createDeploymentRoutes(m *mux.Router, h *DeploymentHandler) {
-	parseVars := func(r *http.Request) (*Deployment, error) {
-		var err error
-		vars := mux.Vars(r)
-		deploy := &Deployment{}
-		if projectId, ok := vars["project_id"]; ok {
-			deploy.ProjectId, err = strconv.ParseUint(projectId, 36, 64)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if branch, ok := vars["branch"]; ok {
-			deploy.ProjectId = &branch
-		} else {
-			deploy.ProjectId = nil
-		}
-		if target, ok := vars["target"]; ok {
-			var target uint64
-			target, err := strconv.ParseUint(projectId, 36, 64)
-			if err != nil {
-				return nil, err
-			}
-			deploy.Target = &target
-		} else {
-			deploy.Target = nil
-		}
-		return deploy, nil
+func parseVars(r *http.Request) (d *Deployment, err error) {
+	var ok bool
+	d = &Deployment{
+		Branch: new(string),
+		Target: new(uint64),
 	}
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		deployment := parseVars(r)
-		err := h.Deploy(deployment, r)
-		if err != nil {
-			http.Error(w, "Internal server error.", 500)
-			// TODO(james7132): Add failure notifiers here
-		}
-		// TODO(james7132): Add success notifiers here
-		w.Write([]byte("Success."), 200)
+	vars := mux.Vars(r)
+	d.ProjectId, err = strconv.ParseUint(vars["project_id"], 36, 64)
+	if err != nil {
+		return
 	}
-	m.HandleFunc("/{project_id}").Methods("POST").HandlerFunc(handler)
-	m.HandleFunc("/{project_id}/{branch}").Methods("POST").HandlerFunc(handler)
-	m.HandleFunc("/{project_id}/{branch}/{target}").Methods("POST").HandlerFunc(handler)
+	if *d.Branch, ok = vars["branch"]; !ok {
+		d.Branch = nil
+	}
+	*d.Target, err = strconv.ParseUint(vars["target"], 36, 64)
+	if err != nil {
+		d.Target = nil
+	}
+	return
+}
+
+func parseQuery(r *http.Request) (h DeploymentHandler, err error) {
+	params := r.URL.Query()["h"]
+	if len(params) <= 0 {
+		err = fmt.Errorf("No query param")
+		return
+	}
+	handlerName := params[0]
+	h, ok := handlers[handlerName]
+	if !ok {
+		err = fmt.Errorf("No matching handler for %s", h)
+		return
+	}
+	return
+}
+
+func handleDeploy(w http.ResponseWriter, r *http.Request) {
+	deployHandler, err := parseQuery(r)
+	if err != nil {
+		http.Error(w, "Invalid Handler", 400)
+		return
+	}
+	deployment, err := parseVars(r)
+	if deployHandler == nil {
+		http.Error(w, "Error parsing request.", 400)
+		return
+	}
+	err = deployHandler.Deploy(deployment, r)
+	if err != nil {
+		http.Error(w, "Internal server error.", 500)
+		// TODO(james7132): Add failure notifiers here
+	}
+	// TODO(james7132): Add success notifiers here
+  w.WriteHeader(200)
+	w.Write([]byte("Success."))
 }

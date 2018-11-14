@@ -9,6 +9,6 @@ import (
 
 func Handler() http.Handler {
 	r := mux.NewRouter()
-	deploy.Init(r.PathPrefix('/deploy').Subrouter())
+	deploy.Init(r.PathPrefix("/deploy").Subrouter())
 	return r
 }
