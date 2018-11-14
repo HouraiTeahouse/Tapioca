@@ -422,9 +422,6 @@ func (m *BuildProto_Metadata) GetTarget() Target {
 	return Target_Any
 }
 
-// ID: 78 bytes:
-//     {64-byte block SHA-512} +
-//     {14-byte block build hash}
 type BlockInfo struct {
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`

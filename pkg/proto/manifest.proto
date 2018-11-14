@@ -77,3 +77,16 @@ message ManifestBlockRange {
   // The number of blocks in the range.
   uint64 size = 2;
 }
+
+message ManifestDiffProto {
+  repeated ManifestBlockProto blocks = 1;
+  map<string, FileDiffProto> changed_files = 2;
+  ManifestMetadataProto metadata = 3;
+}
+
+message FileDiffProto {
+  // Key: the block offset in the file.
+  // Value: the block id in the manifest diff that corresponds to the changed
+  // block.
+  map<uint64, uint64> changed_blocks = 1;
+}

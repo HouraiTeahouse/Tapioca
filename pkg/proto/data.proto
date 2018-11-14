@@ -95,4 +95,5 @@ message BuildProto {
 // ID: 78 bytes:
 //     {64-byte block SHA-512} +
 //     {14-byte block build hash}
+
 message BlockInfo {}
