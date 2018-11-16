@@ -6,7 +6,7 @@ package tapioca;
 
 option go_package = "pkg/proto";
 
-service BuildService {
+service Build {
   rpc GetLatestBuild (BuildRequest) returns (BuildResponse);
 }
 

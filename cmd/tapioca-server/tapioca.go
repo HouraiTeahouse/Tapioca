@@ -3,9 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	tapiocaGrpc "github.com/HouraiTeahouse/Tapioca/api/grpc"
 	tapiocaHttp "github.com/HouraiTeahouse/Tapioca/api/http"
 	"github.com/soheilhy/cmux"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 	"log"
 	"net"
 	"net/http"
@@ -13,8 +15,27 @@ import (
 )
 
 var (
-	port = flag.String("port", "8080", "The port to expose the server on")
+	port = flag.String("port", "80", "The port to expose the server on")
 )
+
+func main() {
+	flag.Parse()
+
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", *port))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	m := cmux.New(listener)
+	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	httpL := m.Match(cmux.HTTP1Fast())
+
+	g := new(errgroup.Group)
+	g.Go(func() error { return serveGrpc(grpcL) })
+	g.Go(func() error { return serveHttp(httpL) })
+	g.Go(func() error { return m.Serve() })
+	log.Println("Run server: ", g.Wait())
+}
 
 func serveHttp(l net.Listener) error {
 	s := &http.Server{
@@ -26,20 +47,8 @@ func serveHttp(l net.Listener) error {
 	return s.Serve(l)
 }
 
-func main() {
-	flag.Parse()
-
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%", *port))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// TODO(james7132): Add GRPC endpoints to this
-	m := cmux.New(listener)
-	httpListener := m.Match(cmux.HTTP1Fast())
-
-	g := new(errgroup.Group)
-	g.Go(func() error { return serveHttp(httpListener) })
-	g.Go(func() error { return m.Serve() })
-	log.Println("Run server: ", g.Wait())
+func serveGrpc(l net.Listener) error {
+	s := grpc.NewServer()
+	tapiocaGrpc.InitServices(s)
+	return s.Serve(l)
 }

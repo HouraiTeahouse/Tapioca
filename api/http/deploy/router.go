@@ -1,9 +1,9 @@
 package deploy
 
 import (
+	"fmt"
 	"github.com/gorilla/mux"
 	"net/http"
-  "fmt"
 	"strconv"
 )
 
@@ -89,6 +89,6 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 		// TODO(james7132): Add failure notifiers here
 	}
 	// TODO(james7132): Add success notifiers here
-  w.WriteHeader(200)
+	w.WriteHeader(200)
 	w.Write([]byte("Success."))
 }

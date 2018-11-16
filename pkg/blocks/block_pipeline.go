@@ -81,7 +81,7 @@ func (b *BlockPipeline) FromDirectory(root string) *BlockPipeline {
 			defer rc.Close()
 			return b.processReader(ctx, relPath, rc)
 		})
-    return nil
+		return nil
 	})
 	go func() {
 		defer b.WaitGroup.Done()
