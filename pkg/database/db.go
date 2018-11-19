@@ -26,18 +26,18 @@ type Database struct {
 }
 
 func (db *Database) Init(path string) (err error) {
-  setup := []func() error {
-    func() error { db.Env, err = lmdb.NewEnv(); return err },
-    func() error { return db.SetMapSize(25 * (1 << 30)) }, // 25GB iniitial map size
-    func() error { return db.SetMaxDBs(1024) },
-    func() error { return db.SetMaxReaders(1024) },
-  }
-  for _, setupFunc := range setup {
-    err = setupFunc()
-    if err != nil {
-      return
-    }
-  }
+	setup := []func() error{
+		func() error { db.Env, err = lmdb.NewEnv(); return err },
+		func() error { return db.SetMapSize(25 * (1 << 30)) }, // 25GB iniitial map size
+		func() error { return db.SetMaxDBs(1024) },
+		func() error { return db.SetMaxReaders(1024) },
+	}
+	for _, setupFunc := range setup {
+		err = setupFunc()
+		if err != nil {
+			return
+		}
+	}
 	err = db.Env.Open(path, 0, 0)
 	if err != nil {
 		return

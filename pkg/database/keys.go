@@ -24,7 +24,7 @@ func (p *ProjectId) Decode(buf []byte) error {
 		return ErrBufferTooSmall
 	}
 	*p = ProjectId(encoding.Uint64(buf))
-  return nil
+	return nil
 }
 
 type BranchId struct {
@@ -45,7 +45,7 @@ func (p *BranchId) Decode(buf []byte) error {
 	}
 	p.Project.Decode(buf)
 	p.Branch = encoding.Uint16(buf[8:])
-  return nil
+	return nil
 }
 
 type CommitId [4]byte
@@ -59,7 +59,7 @@ func (c *CommitId) Decode(buf []byte) error {
 		return ErrBufferTooSmall
 	}
 	copy(buf, c[:])
-  return nil
+	return nil
 }
 
 type Platform uint16
@@ -75,7 +75,7 @@ func (p *Platform) Decode(buf []byte) error {
 		return ErrBufferTooSmall
 	}
 	*p = Platform(encoding.Uint16(buf[8:]))
-  return nil
+	return nil
 }
 
 type BuildId struct {
@@ -97,17 +97,17 @@ func (b *BuildId) Decode(buf []byte) error {
 	if len(buf) < 16 {
 		return ErrBufferTooSmall
 	}
-  err := b.BranchId.Decode(buf[0:])
-  if err != nil {
-    return err
-  }
+	err := b.BranchId.Decode(buf[0:])
+	if err != nil {
+		return err
+	}
 	err = b.Commit.Decode(buf[10:])
-  if err != nil {
-    return err
-  }
+	if err != nil {
+		return err
+	}
 	err = b.Platform.Decode(buf[14:])
-  if err != nil {
-    return err
-  }
-  return nil
+	if err != nil {
+		return err
+	}
+	return nil
 }

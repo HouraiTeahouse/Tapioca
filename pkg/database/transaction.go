@@ -1,9 +1,11 @@
 package database
 
 import (
+	"bytes"
 	"github.com/HouraiTeahouse/Tapioca/pkg/blocks"
 	proto "github.com/HouraiTeahouse/Tapioca/pkg/proto"
 	lmdb "github.com/bmatsuo/lmdb-go/lmdb"
+	"github.com/bmatsuo/lmdb-go/lmdbscan"
 	pb "github.com/golang/protobuf/proto"
 )
 
@@ -84,7 +86,7 @@ func (tx *Transaction) isBlockLive(key []byte, manifest *proto.ManifestProto) bo
 	scanner := lmdbscan.New(tx.Txn, tx.Blocks)
 	defer scanner.Close()
 
-	scanner.Set(keyprefix, nil, lmdb.SetRange)
+	scanner.Set(key, nil, lmdb.SetRange)
 	for scanner.Scan() {
 		return bytes.HasPrefix(scanner.Key(), key)
 	}
