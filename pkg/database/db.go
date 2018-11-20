@@ -38,7 +38,7 @@ func (db *Database) Init(path string) (err error) {
 			return
 		}
 	}
-	err = db.Env.Open(path, 0, lmdb.MDB_NORDAHEAD)
+	err = db.Env.Open(path, 0, lmdb.NoReadahead)
 	if err != nil {
 		db.Env.Close()
 		return
@@ -69,7 +69,7 @@ func (db *Database) Init(path string) (err error) {
 	return
 }
 
-func (db *Database) MakeTxn(txn *lmdb.Txn) Transaction {
+func (db *Database) MakeTxn(tx *lmdb.Txn) Transaction {
 	// Directly return a read only slice from shared memory when reading.
 	//
 	// Avoids a copy when reading from the database. However, will lead to a
@@ -78,7 +78,7 @@ func (db *Database) MakeTxn(txn *lmdb.Txn) Transaction {
 
 	return Transaction{
 		Database: db,
-		Txn:      txn,
+		Txn:      tx,
 	}
 }
 

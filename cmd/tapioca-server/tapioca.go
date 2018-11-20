@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	port = flag.String("port", "80", "The port to expose the server on")
+	port = flag.String("port", "8080", "The port to expose the server on")
 )
 
 func main() {
@@ -31,9 +31,18 @@ func main() {
 	httpL := m.Match(cmux.HTTP1Fast())
 
 	g := new(errgroup.Group)
-	g.Go(func() error { return serveGrpc(grpcL) })
-	g.Go(func() error { return serveHttp(httpL) })
-	g.Go(func() error { return m.Serve() })
+	g.Go(func() error {
+		log.Println("Starting gRPC server...")
+		return serveGrpc(grpcL)
+	})
+	g.Go(func() error {
+		log.Println("Starting HTTP server...")
+		return serveHttp(httpL)
+	})
+	g.Go(func() error {
+		log.Printf("Serving listener on port: %s", *port)
+		return m.Serve()
+	})
 	log.Println("Run server: ", g.Wait())
 }
 
