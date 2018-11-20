@@ -66,6 +66,12 @@ func (db *Database) Init(path string) (err error) {
 }
 
 func (db *Database) MakeTxn(txn *lmdb.Txn) Transaction {
+	// Directly return a read only slice from shared memory when reading.
+	//
+	// Avoids a copy when reading from the database. However, will lead to a
+	// panic if the
+	tx.RawRead = true
+
 	return Transaction{
 		Database: db,
 		Txn:      txn,
