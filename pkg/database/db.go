@@ -28,7 +28,7 @@ type Database struct {
 func (db *Database) Init(path string) (err error) {
 	setup := []func() error{
 		func() error { db.Env, err = lmdb.NewEnv(); return err },
-		func() error { return db.SetMapSize(25 * (1 << 30)) }, // 25GB iniitial map size
+		func() error { return db.SetMapSize(1 << 40) }, // 1TB map size
 		func() error { return db.SetMaxDBs(1024) },
 		func() error { return db.SetMaxReaders(1024) },
 	}
@@ -38,8 +38,9 @@ func (db *Database) Init(path string) (err error) {
 			return
 		}
 	}
-	err = db.Env.Open(path, 0, 0)
+	err = db.Env.Open(path, 0, lmdb.MDB_NORDAHEAD)
 	if err != nil {
+		db.Env.Close()
 		return
 	}
 	err = db.Env.Update(func(tx *lmdb.Txn) (err error) {
@@ -48,6 +49,9 @@ func (db *Database) Init(path string) (err error) {
 		openDB(tx, &err, &db.Blocks, "blocks")
 		return
 	})
+	if err != nil {
+		return
+	}
 
 	// Maintainence Goroutine to resize the database as needed
 	go func() {
@@ -69,7 +73,7 @@ func (db *Database) MakeTxn(txn *lmdb.Txn) Transaction {
 	// Directly return a read only slice from shared memory when reading.
 	//
 	// Avoids a copy when reading from the database. However, will lead to a
-	// panic if the
+	// panic if the retrieved slice is written to.
 	tx.RawRead = true
 
 	return Transaction{
