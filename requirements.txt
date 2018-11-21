@@ -1,6 +1,0 @@
-aiohttp==3.4.4
-b2blaze==0.2.1
-click==7.0
-protobuf==3.6.1
-py-coders==1.0.0
-uvloop==0.11.3

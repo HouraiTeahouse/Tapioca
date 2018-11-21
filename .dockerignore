@@ -1,1 +1,6 @@
-venv
+.git
+.gitignore
+.dockerignore
+README.md
+LICENSE
+Dockerfile

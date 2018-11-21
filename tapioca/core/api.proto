@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-import "tapioca/core/manifest.proto";
-
-package tapioca.api;
-
-message BuildInfo {
-  tapioca.core.ManifestProto manifest = 1;
-}

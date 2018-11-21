@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+import "pkg/proto/manifest.proto";
+
+package tapioca;
+
+option go_package = "pkg/proto";
+
+service Build {
+  rpc GetLatestBuild (BuildRequest) returns (BuildResponse);
+}
+
+message BuildRequest {
+  // Required: the branch ID targetted.
+  uint64 branch_id = 1;
+  // Required: a list of acceptable target platforms
+  repeated Target target = 2;
+
+  // Optional: The client's local build ID. This should only be unset when the
+  // local client is freshly installing the targetted game.
+  bytes local_build_id = 3;
+}
+
+message BuildResponse {
+  // Required: The ID corresponding to the latest build. This should be stored
+  // persistently by the client, alongside any manifest results included to
+  // reduce the amount of data checked.
+  bytes build_id = 1;
+  // Required: A checksum value for verifying if the resultant manifest on the
+  //           client's end matches the remote one.
+  uint64 manifest_checksum = 2;
+
+  // Optional: Contains infromation to recreate the latest build on the client.
+  //
+  // The following rules determine which field is set:
+  //  * The request's local_build_id is not set: full manifest.
+  //  * The local_build_id is not found on the remote server: full manifest.
+  //  * The local build has a "small" diff with the latest build: manifest diff.
+  //  * The local_build_id matches the server's latest build: neither.
+  //  * Any other case: full manifest.
+  //
+  // A diff between two builds is considered "too big" when more than a
+  // configured threshold of blocks have changed within a manifest. This is to
+  // avoid potential diff mismatches and addiitonal round trips. When diffs get
+  // too large, there's not much to gain against sending the full manifest.
+  //
+  // If neither field is set, the local client has an up to date client, but
+  // should still verify it's validity with manifest_checksum.
+  oneof changes {
+    ManifestProto manifest = 3;
+    ManifestDiffProto manifest_diff = 4;
+  }
+}

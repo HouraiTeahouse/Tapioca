@@ -1,20 +1,21 @@
-language: python
+language: go
 cache:
   pip: true
   directories:
   - $HOME/protoc
-python: 3.7-dev
+go: "1.11"
 env:
   global:
     - PROTO_VERSION="3.6.1"
 before_install:
-- bash install_protobuf.sh $PROTO_VERSION
+- bash ./scripts/install_protobuf.sh $PROTO_VERSION
+- curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.12
+- go get -u github.com/golang/protobuf/protoc-gen-go
 install:
-- pip install -r requirements.txt
-- pip install flake8
+  - bash -c "shopt -s globstar; $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --go_out=plugins=grpc:$(pwd) **/*.proto"
+- go get -t ./...
 script:
-- flake8 --show-source tapioca
-- bash -c "shopt -s globstar; $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --python_out=$(pwd) **/*.proto"
-- python -m unittest discover
+- ./bin/golangci-lint run
+- go test -v ./...
 notifications:
   email: false
