@@ -4,7 +4,12 @@ import (
 	"fmt"
 	"github.com/HouraiTeahouse/Tapioca/pkg/blocks"
 	"github.com/HouraiTeahouse/Tapioca/pkg/proto"
+	"hash/crc64"
 	"strings"
+)
+
+var (
+	table = crc64.MakeTable(crc64.ECMA)
 )
 
 const ManifestPathDelimiter = "/"
@@ -57,6 +62,24 @@ func (m *Manifest) ToProto() (*proto.ManifestProto, error) {
 		}
 	}
 	return manifestProto, nil
+}
+
+func (m *Manifest) Hash() uint64 {
+	hash := uint64(0)
+	for _, file := range m.Files {
+		hash ^= file.Hash()
+	}
+	return hash
+}
+
+func (f *ManifestFile) Hash() (uint64, error) {
+	// Hashes should never return an error when writing
+	crc := crc64.New(table)
+	crc.Write([]byte(f.Path))
+	for _, block := range f.Blocks {
+		crc.Write(block.Hash.AsSlice())
+	}
+	return crc.Sum64()
 }
 
 func (b *ManifestBlock) ToProto() *proto.ManifestBlockProto {
