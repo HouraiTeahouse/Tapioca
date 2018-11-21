@@ -72,7 +72,7 @@ func (m *Manifest) Hash() uint64 {
 	return hash
 }
 
-func (f *ManifestFile) Hash() (uint64, error) {
+func (f *ManifestFile) Hash() uint64 {
 	// Hashes should never return an error when writing
 	crc := crc64.New(table)
 	crc.Write([]byte(f.Path))

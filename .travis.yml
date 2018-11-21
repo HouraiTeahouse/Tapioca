@@ -12,7 +12,7 @@ before_install:
 - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.12
 - go get -u github.com/golang/protobuf/protoc-gen-go
 install:
-- bash -c "shopt -s globstar; $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --go_out=$(pwd) **/*.proto"
+  - bash -c "shopt -s globstar; $HOME/protoc/bin/protoc --proto_path=$HOME/protoc/include --proto_path=$(pwd) --go_out=plugins=grpc:$(pwd) **/*.proto"
 - go get -t ./...
 script:
 - ./bin/golangci-lint run
